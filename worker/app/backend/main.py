@@ -730,13 +730,22 @@ async def get_status(job_id: str, _: bool = Depends(_verify_internal)):
 
 @app.get("/v1/jobs/{job_id}/output")
 async def get_output(job_id: str, filename: str, _: bool = Depends(_verify_internal)):
+    """Return any file in the job dir (output or input). Strict path check to prevent traversal."""
     jd = _job_dir(job_id)
     target = jd / filename
-    if not target.is_file() or not target.name.startswith("output_"):
+    # Prevent path traversal: filename must be a single component
+    if "/" in filename or "\\" in filename or filename.startswith(".") or ".." in filename:
+        raise HTTPException(status_code=400, detail="invalid filename")
+    if not target.is_file():
         raise HTTPException(status_code=404, detail="output not found")
+    media_type = "video/mp4"
+    if filename.endswith(".wav"):
+        media_type = "audio/wav"
+    elif filename.endswith(".mp3"):
+        media_type = "audio/mpeg"
     return FileResponse(
         target,
-        media_type="video/mp4",
+        media_type=media_type,
         filename=filename,
     )
 
