@@ -312,14 +312,15 @@ async def create_job(
     try:
         async with httpx.AsyncClient(timeout=WORKER_TIMEOUT) as c:
             # 1. Upload files to worker
-            for file_id, role in [
+            files_to_send = [
                 (req.product_id, "product"),
                 (req.background_id, "background"),
-                (req.cover_id, "cover") if req.cover_id else None,
-                (req.audio_id, "audio") if req.audio_id else None,
-            ]:
-                if not file_id:
-                    continue
+            ]
+            if req.cover_id:
+                files_to_send.append((req.cover_id, "cover"))
+            if req.audio_id:
+                files_to_send.append((req.audio_id, "audio"))
+            for file_id, role in files_to_send:
                 src = UPLOADS_DIR / file_id
                 if not src.is_file():
                     raise HTTPException(400, detail=f"file {file_id} not found")
