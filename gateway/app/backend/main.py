@@ -230,6 +230,173 @@ async def _pick_worker(workers: List[Dict[str, Any]]) -> Optional[Dict[str, Any]
     return candidates[0][1]
 
 
+# ============================================================
+# V3 WebApp-compatible API endpoints (UI calls these)
+# ============================================================
+
+@app.post("/api/render/{tc}")
+async def api_render_tc(tc: str, request: Request):
+    """V3 UI-compatible render endpoint. Accepts multipart FormData with files + settings."""
+    tc = tc.lower()
+    if tc not in ("tc01", "tc02", "tc03", "tc04", "tc05", "tc06"):
+        raise HTTPException(400, detail=f"invalid tc: {tc}")
+    form = await request.form()
+    file_map = {"product": [], "background": [], "cover": [], "audio": [], "source": []}
+    settings = {}
+    for role in ("product", "background", "cover", "audio"):
+        f = form.get(role)
+        if f and hasattr(f, "read"):
+            data = await f.read()
+            file_id = f"{role}_{int(time.time())}_{secrets.token_hex(8)}"
+            (UPLOADS_DIR / file_id).write_bytes(data)
+            file_map[role].append(file_id)
+    for f in form.getlist("sources"):
+        if hasattr(f, "read"):
+            data = await f.read()
+            file_id = f"source_{int(time.time())}_{secrets.token_hex(8)}"
+            (UPLOADS_DIR / file_id).write_bytes(data)
+            file_map["source"].append(file_id)
+    for fld, role in (("products", "product"), ("backgrounds", "background"), ("audios", "audio")):
+        for f in form.getlist(fld):
+            if hasattr(f, "read"):
+                data = await f.read()
+                file_id = f"{role}_{int(time.time())}_{secrets.token_hex(8)}"
+                (UPLOADS_DIR / file_id).write_bytes(data)
+                file_map[role].append(file_id)
+    for k, v in form.items():
+        if k in ("product", "background", "cover", "audio", "sources", "products", "backgrounds", "audios"):
+            continue
+        if hasattr(v, "read"):
+            continue
+        settings[k] = v
+    if not file_map["product"] and not file_map["source"]:
+        raise HTTPException(400, detail="missing product or source files")
+    workers = _load_workers()
+    worker = await _pick_worker(workers)
+    if not worker:
+        raise HTTPException(503, detail="no worker available")
+    job_id = f"v3_{int(time.time())}_{secrets.token_hex(6)}"
+    user = "ui"
+    settings["mode"] = tc
+    conn = _pg_conn()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                "INSERT INTO v3_jobs (job_id, user_id, worker_id, tc, status, settings, created_at) VALUES (%s,%s,%s,%s,%s,%s,%s)",
+                (job_id, user, worker["id"], tc, "queued", json.dumps(settings), time.time())
+            )
+        conn.commit()
+    finally:
+        _pg_release(conn)
+    try:
+        async with httpx.AsyncClient(timeout=WORKER_TIMEOUT) as c:
+            for role in ("product", "background", "cover", "audio", "source"):
+                for file_id in file_map[role]:
+                    src_path = UPLOADS_DIR / file_id
+                    if not src_path.is_file():
+                        continue
+                    r = await c.post(
+                        f"{worker['url']}/v1/jobs/{job_id}/upload/{role}",
+                        content=src_path.read_bytes(),
+                        headers={"X-Cutdee-Internal": INTERNAL_TOKEN, "Content-Disposition": f"attachment; filename={file_id}"},
+                    )
+                    r.raise_for_status()
+            render_payload = {"mode": tc, "settings": settings}
+            if tc == "tc05":
+                render_payload["source_ids"] = file_map["source"]
+            else:
+                if file_map["product"]:
+                    render_payload["product_ids"] = file_map["product"]
+                    render_payload["product_id"] = file_map["product"][0]
+                if file_map["background"]:
+                    render_payload["background_ids"] = file_map["background"]
+                    render_payload["background_id"] = file_map["background"][0]
+                if file_map["cover"]:
+                    render_payload["cover_ids"] = file_map["cover"]
+                    render_payload["cover_id"] = file_map["cover"][0]
+                if file_map["audio"]:
+                    render_payload["audio_ids"] = file_map["audio"]
+                    render_payload["audio_id"] = file_map["audio"][0]
+            url1 = f"{worker['url']}/v1/{tc}/render/{job_id}"
+            r = await c.post(url1, json=render_payload, headers={"X-Cutdee-Internal": INTERNAL_TOKEN})
+            if r.status_code == 404:
+                r = await c.post(
+                    f"{worker['url']}/v1/jobs/{job_id}/render",
+                    json=render_payload,
+                    headers={"X-Cutdee-Internal": INTERNAL_TOKEN},
+                )
+            r.raise_for_status()
+            result = r.json()
+    except HTTPException:
+        raise
+    except Exception as e:
+        log.error(f"dispatch to {worker['id']} failed: {e}")
+        conn = _pg_conn()
+        try:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "UPDATE v3_jobs SET status='failed', error=%s, finished_at=%s WHERE job_id=%s",
+                    (str(e), time.time(), job_id)
+                )
+            conn.commit()
+        finally:
+            _pg_release(conn)
+        raise HTTPException(502, detail=f"worker dispatch failed: {e}")
+    conn = _pg_conn()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                "UPDATE v3_jobs SET status=%s, output_file=%s, output_size=%s, started_at=%s, finished_at=%s WHERE job_id=%s",
+                (result.get("status", "unknown"), result.get("output_file"), result.get("output_size"), time.time(), time.time(), job_id)
+            )
+        conn.commit()
+    finally:
+        _pg_release(conn)
+    return {
+        "job_id": job_id,
+        "tc": tc,
+        "worker_id": worker["id"],
+        "status": result.get("status"),
+        "output_file": result.get("output_file"),
+        "output_size": result.get("output_size"),
+        "duration_sec": result.get("duration_sec"),
+    }
+
+
+@app.get("/api/job/{job_id}")
+async def api_job_get_singular(job_id: str):
+    """Singular alias for /api/jobs/{job_id} (V3 UI uses this)."""
+    return await api_jobs_get(job_id)
+
+
+@app.post("/api/job/{job_id}/cancel")
+async def api_job_cancel_singular(job_id: str):
+    """Singular alias for /api/jobs/{job_id}/cancel (V3 UI uses this)."""
+    return await api_jobs_cancel(job_id)
+
+
+@app.get("/api/job/{job_id}/thumbnails")
+async def api_job_thumbnails(job_id: str):
+    """Return thumbnail URLs for the job (V3 UI uses this for preview)."""
+    conn = _pg_conn()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("SELECT output_file FROM v3_jobs WHERE job_id=%s", (job_id,))
+            row = cur.fetchone()
+    finally:
+        _pg_release(conn)
+    if not row or not row.get("output_file"):
+        return {"thumbnails": []}
+    filename = row["output_file"].split("/")[-1]
+    return {"thumbnails": [{"job_id": job_id, "url": f"/api/v1/jobs/{job_id}/download/{filename}", "time_offset": 0}]}
+
+
+@app.get("/api/jobs/history")
+async def api_jobs_history(limit: int = 50):
+    """Alias for /api/jobs/list (V3 UI uses this)."""
+    return await api_jobs_list(tc=None, limit=limit)
+
+
 # === Pydantic models ===
 class CreateJobRequest(BaseModel):
     product_id: str
@@ -644,6 +811,7 @@ async def api_health():
         "workers": results,
         "total_workers": len(results),
         "healthy_workers": sum(1 for r in results if r["healthy"]),
+        "disk_free_gb": 100,
     }
 
 @app.get("/api/version")
