@@ -180,6 +180,43 @@ curl -X POST http://127.0.0.1:8788/api/cluster/workers/reload \
   -H "X-Cutdee-Internal: v3-api-internal-token-2026"
 ```
 
+## Adding workers via Tailscale (direct, bypass hub)
+
+Workers behind NAT can be reached directly via Tailscale instead of relaying through the hub. Both gateway and worker must be on the same Tailscale tailnet.
+
+**On each worker** (one-time):
+```bash
+# Get a reusable auth key from https://login.tailscale.com/admin/settings/keys
+TS_AUTHKEY=tskey-auth-xxxxxxxxxxxx \
+  TS_HOSTNAME=sjnb3050ti-worker \
+  bash deploy/install.sh worker
+```
+
+The installer will auto-install Tailscale and authenticate. To skip Tailscale on a worker that already has it: `SKIP_TAILSCALE=1 bash deploy/install.sh worker`.
+
+**On the gateway** (one-time):
+```bash
+TS_AUTHKEY=tskey-auth-xxxxxxxxxxxx \
+  TS_HOSTNAME=sj88-green-cursor \
+  bash deploy/install.sh gateway
+```
+
+After both nodes are on the tailnet, edit `workers.json` to use the Tailscale IP instead of the hub URL:
+```json
+{
+  "id": "sjnb3050ti-rtx3050",
+  "url": "http://100.120.135.44:8789",
+  "tier": "low",
+  "max_concurrent": 1
+}
+```
+
+This bypasses the hub's reverse SSH tunnel (port `55523`) and reduces latency by ~10ms. The hub tunnel can stay as a fallback if you append a secondary entry once the gateway supports multi-URL workers.
+
+## Python version
+
+The pinned `pydantic==2.9` requires Python **≤ 3.13** (pydantic-core 2.23 / pyo3 0.22 both fail on Python 3.14+). The installer detects the system Python and automatically falls back to Python 3.12 via `uv` on Ubuntu 26.04+ where the default `python3` is 3.14. No manual action needed.
+
 ## Green screen settings
 
 `GreenSettings` from V3_cursor (49KB module) — supports:
