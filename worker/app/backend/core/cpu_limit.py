@@ -22,6 +22,16 @@ def _state_file() -> Path:
     return Path.home() / ".green_pc" / "cpu_percent.txt"
 
 
+# FIX (2026-08-18): auto-load saved CPU percent at module import so the worker
+# process picks up an updated ~/.green_pc/cpu_percent.txt without needing a
+# separate hook in main.py. If the file is missing/corrupt, the default
+# (_DEFAULT = 50) stays in effect.
+try:
+    _cpu_percent = max(_MIN, min(_MAX, int(_state_file().read_text(encoding="utf-8").strip())))
+except Exception:
+    pass
+
+
 def set_cpu_percent(pct: int, persist: bool = True) -> int:
     """ตั้งค่า CPU% (clamp 5–100) — apply ทันทีและ persist ถ้า persist=True."""
     global _cpu_percent

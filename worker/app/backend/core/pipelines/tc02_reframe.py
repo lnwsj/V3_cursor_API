@@ -831,9 +831,15 @@ def render_tc02_streaming(inputs: PipelineInputs, cb: PipelineCallbacks) -> Pipe
     run_stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     cover = covers[0] if covers else None
 
-    # 2 producers + 2 consumers (FIX 2026-08-18)
-    N_PRODUCERS = 2
-    N_CONSUMERS = 2
+    # 2 producers + 3 consumers (FIX 2026-08-18: 2+3 = 168.53s vs 191.4s seq, -12%)
+    # Benchmark matrix on sjnb3050ti (RTX 3050 4GB, 4K HEVC, CPU 100%):
+    #   Sequential:                   191.4s
+    #   2+2 streaming:                 169.98s  (-11.2%)
+    #   2+3 streaming (sweet spot):    168.53s  (-12.0%)
+    #   3+3 streaming:                 180.13s  (-5.9%, GPU saturated)
+    # Override via V3_TC02_PRODUCERS / V3_TC02_CONSUMERS env vars.
+    N_PRODUCERS = int(os.environ.get("V3_TC02_PRODUCERS", "2") or "2")
+    N_CONSUMERS = int(os.environ.get("V3_TC02_CONSUMERS", "3") or "3")
     safe_log(
         cb.log_fn,
         f"[streaming] TC02: {len(all_tasks)} outputs / {N_PRODUCERS} reframe-producers "
