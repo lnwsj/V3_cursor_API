@@ -19,6 +19,10 @@ from __future__ import annotations
 import os
 import time
 import traceback
+import concurrent.futures
+
+# v3.PARALLEL: TC02 chroma stage parallel ffmpegs (env V3_TC02_PARALLEL, default 1)
+_TC02_PARALLEL = max(1, int(os.environ.get("V3_TC02_PARALLEL", "1") or "1"))
 from datetime import datetime
 from pathlib import Path
 
@@ -403,53 +407,119 @@ def render(inputs: PipelineInputs, cb: PipelineCallbacks) -> PipelineResult:
     total = len(reframe_outputs)
     chroma_engine_cancelled = False
 
-    for idx, reframed in enumerate(reframe_outputs, 1):
-        if stop():
-            safe_log(cb.log_fn, f"stopped before chroma {idx}/{total}")
-            break
-        background = backgrounds[(idx - 1) % len(backgrounds)]
-        audio = audios[(idx - 1) % len(audios)] if audios else None
-        out_path = os.path.join(
-            out_dir,
-            f"{_safe_stem(reframed)}__tc02_chroma_{run_stamp}_{idx:03d}.mp4",
+    # v3.PARALLEL: parallel ffmpegs if V3_TC02_PARALLEL>1
+    n_parallel = min(_TC02_PARALLEL, total) if total > 0 else 1
+    if n_parallel > 1:
+        # Round-robin distribution across N workers (worker_id cycles 0..N-1)
+        safe_log(
+            cb.log_fn,
+            f"[parallel] TC02 chroma: {total} outputs / {n_parallel} ffmpegs "
+            f"(V3_TC02_PARALLEL={_TC02_PARALLEL})",
         )
-        safe_file(cb.file_fn, f"chroma: {os.path.basename(reframed)}")
 
-        def _on_green_progress(p, _idx=idx, _total=total) -> None:
-            pct = getattr(p, "pct", float(p) if isinstance(p, (int, float)) else 0.0)
-            overall = 45.0 + 55.0 * (((_idx - 1) + pct / 100.0) / max(_total, 1))
-            safe_progress(cb.progress_fn, overall, f"Chroma {_idx}/{_total} ({pct:.0f}%)")
-
-        try:
-            engine_result = render_green(
-                cover=cover,
-                product=reframed,
-                background=background,
-                audio=audio,
-                out_path=out_path,
-                settings=green_settings,
-                on_log=cb.log_fn,
-                on_progress=_on_green_progress,
-                stop_check=stop,
-                tc_label="TC02",
+        def _chroma_one(worker_id: int, idx: int, reframed: str):
+            """Run 1 chroma output. Returns (idx, status, detail, dur_sec)."""
+            if stop():
+                return (idx, "cancelled", "stopped before start", 0.0)
+            background = backgrounds[(idx - 1) % len(backgrounds)]
+            audio = audios[(idx - 1) % len(audios)] if audios else None
+            out_path = os.path.join(
+                out_dir,
+                f"{_safe_stem(reframed)}__tc02_chroma_{run_stamp}_{idx:03d}.mp4",
             )
-            if bool(getattr(engine_result, "success", False)) and _is_valid_output(out_path):
-                final_outputs.append(out_path)
-                safe_log(cb.log_fn, f"final.{idx:03d}.ok path={out_path}")
-            elif bool(getattr(engine_result, "cancelled", False)):
-                safe_log(cb.log_fn, f"final.{idx:03d}.cancelled")
-                chroma_engine_cancelled = True
+            t0 = time.time()
+            try:
+                engine_result = render_green(
+                    cover=cover,
+                    product=reframed,
+                    background=background,
+                    audio=audio,
+                    out_path=out_path,
+                    settings=green_settings,
+                    on_log=lambda m, _w=worker_id: safe_log(cb.log_fn, f"[w{_w}] {m}"),
+                    on_progress=None,  # parallel mode skips per-item progress (UI would jitter)
+                    stop_check=stop,
+                    tc_label="TC02",
+                    chroma_max_parallel=n_parallel,  # tell render_green to divide budget
+                )
+                dur = time.time() - t0
+                if bool(getattr(engine_result, "success", False)) and _is_valid_output(out_path):
+                    return (idx, "ok", out_path, dur)
+                elif bool(getattr(engine_result, "cancelled", False)):
+                    return (idx, "cancelled", "cancelled by stop_check", dur)
+                else:
+                    return (idx, "failed", str(getattr(engine_result, "error", "") or "missing/zero output")[:200], dur)
+            except Exception as exc:
+                return (idx, "exception", f"{exc}", time.time() - t0)
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=n_parallel) as executor:
+            futures = []
+            for i, reframed in enumerate(reframe_outputs, 1):
+                worker_id = (i - 1) % n_parallel
+                safe_file(cb.file_fn, f"chroma[w{worker_id}]: {os.path.basename(reframed)}")
+                futures.append(executor.submit(_chroma_one, worker_id, i, reframed))
+
+            for fut in concurrent.futures.as_completed(futures):
+                idx, status, detail, dur = fut.result()
+                if status == "ok":
+                    final_outputs.append(detail)
+                    safe_log(cb.log_fn, f"final.{idx:03d}.ok path={detail} dur={dur:.1f}s")
+                elif status == "cancelled":
+                    safe_log(cb.log_fn, f"final.{idx:03d}.cancelled dur={dur:.1f}s")
+                    chroma_engine_cancelled = True
+                else:
+                    chroma_failed += 1
+                    chroma_errors.append(f"final.{idx:03d}: {detail}")
+                    safe_log(cb.log_fn, f"final.{idx:03d}.{status} error={detail} dur={dur:.1f}s")
+    else:
+        # Sequential (V3_TC02_PARALLEL=1) — original behavior
+        for idx, reframed in enumerate(reframe_outputs, 1):
+            if stop():
+                safe_log(cb.log_fn, f"stopped before chroma {idx}/{total}")
                 break
-            else:
+            background = backgrounds[(idx - 1) % len(backgrounds)]
+            audio = audios[(idx - 1) % len(audios)] if audios else None
+            out_path = os.path.join(
+                out_dir,
+                f"{_safe_stem(reframed)}__tc02_chroma_{run_stamp}_{idx:03d}.mp4",
+            )
+            safe_file(cb.file_fn, f"chroma: {os.path.basename(reframed)}")
+
+            def _on_green_progress(p, _idx=idx, _total=total) -> None:
+                pct = getattr(p, "pct", float(p) if isinstance(p, (int, float)) else 0.0)
+                overall = 45.0 + 55.0 * (((_idx - 1) + pct / 100.0) / max(_total, 1))
+                safe_progress(cb.progress_fn, overall, f"Chroma {_idx}/{_total} ({pct:.0f}%)")
+
+            try:
+                engine_result = render_green(
+                    cover=cover,
+                    product=reframed,
+                    background=background,
+                    audio=audio,
+                    out_path=out_path,
+                    settings=green_settings,
+                    on_log=cb.log_fn,
+                    on_progress=_on_green_progress,
+                    stop_check=stop,
+                    tc_label="TC02",
+                )
+                if bool(getattr(engine_result, "success", False)) and _is_valid_output(out_path):
+                    final_outputs.append(out_path)
+                    safe_log(cb.log_fn, f"final.{idx:03d}.ok path={out_path}")
+                elif bool(getattr(engine_result, "cancelled", False)):
+                    safe_log(cb.log_fn, f"final.{idx:03d}.cancelled")
+                    chroma_engine_cancelled = True
+                    break
+                else:
+                    chroma_failed += 1
+                    detail = str(getattr(engine_result, "error", "") or "missing/zero output")
+                    chroma_errors.append(f"final.{idx:03d}: {detail}")
+                    safe_log(cb.log_fn, f"final.{idx:03d}.fail error={detail[:200]}")
+            except Exception as exc:
                 chroma_failed += 1
-                detail = str(getattr(engine_result, "error", "") or "missing/zero output")
-                chroma_errors.append(f"final.{idx:03d}: {detail}")
-                safe_log(cb.log_fn, f"final.{idx:03d}.fail error={detail[:200]}")
-        except Exception as exc:
-            chroma_failed += 1
-            chroma_errors.append(f"final.{idx:03d}: {exc}")
-            safe_log(cb.log_fn, f"final.{idx:03d}.exception error={exc}")
-            safe_log(cb.log_fn, traceback.format_exc())
+                chroma_errors.append(f"final.{idx:03d}: {exc}")
+                safe_log(cb.log_fn, f"final.{idx:03d}.exception error={exc}")
+                safe_log(cb.log_fn, traceback.format_exc())
 
     paused, cancel_requested = _terminal_flags(cb, terminal_state)
     cancel_requested = cancel_requested or chroma_engine_cancelled

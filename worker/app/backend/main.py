@@ -24,7 +24,6 @@ import shutil
 import threading
 import hashlib
 import secrets
-import subprocess
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 from dataclasses import asdict
@@ -45,32 +44,9 @@ from core.gpu_detector import (
 )
 from core.ffmpeg_runner import FfmpegResult
 from core.media_probe import has_video_stream, has_audio_stream
-
-# V3 pipelines (TC01-TC06) — all available locally
-try:
-    from core.pipelines import _common
-    from core.pipelines import tc01_chroma
-    from core.pipelines import tc02_reframe
-    from core.pipelines import tc03_batch
-    from core.pipelines import tc04_rebatch
-    from core.pipelines import tc05_reframe_only
-    from core.pipelines import tc06_video_loop
-    PIPELINES_AVAILABLE = True
-except Exception as _e:
-    log.warning(f"core.pipelines not importable: {_e} — TC01-TC06 disabled")
-    PIPELINES_AVAILABLE = False
-    _common = None
-    tc01_chroma = tc02_reframe = tc03_batch = None
-    tc04_rebatch = tc05_reframe_only = tc06_video_loop = None
-
-PIPELINES = {
-    "tc01": (lambda i, c: tc01_chroma.render(i, c)) if PIPELINES_AVAILABLE else None,
-    "tc02": (lambda i, c: tc02_reframe.render(i, c)) if PIPELINES_AVAILABLE else None,
-    "tc03": (lambda i, c: tc03_batch.render(i, c)) if PIPELINES_AVAILABLE else None,
-    "tc04": (lambda i, c: tc04_rebatch.render(i, c)) if PIPELINES_AVAILABLE else None,
-    "tc05": (lambda i, c: tc05_reframe_only.render(i, c)) if PIPELINES_AVAILABLE else None,
-    "tc06": (lambda i, c: tc06_video_loop.render(i, c)) if PIPELINES_AVAILABLE else None,
-}
+from core.pipelines import (
+    render_tc01, render_tc02, render_tc03, render_tc04, render_tc05, render_tc06,
+)
 
 # === Configuration ===
 WORKER_PORT = int(os.getenv("WORKER_PORT", "7701"))
@@ -99,19 +75,11 @@ _JOBS: Dict[str, Dict[str, Any]] = {}  # job_id -> {status, log, started_at, ...
 # ============================================================
 
 class RenderRequest(BaseModel):
-    product_id: Optional[str] = None  # upload id (legacy: single)
-    background_id: Optional[str] = None
+    product_id: str  # upload id
+    background_id: str
     cover_id: Optional[str] = None
     audio_id: Optional[str] = None
-    mode: str = "tc01"  # tc01..tc06 — which pipeline to use
-    # V3 WebApp format: list of file paths per role
-    product_ids: List[str] = []
-    background_ids: List[str] = []
-    cover_ids: List[str] = []
-    audio_ids: List[str] = []
-    source_ids: List[str] = []  # TC05 reframe-only
-    settings: Optional[Dict[str, Any]] = None  # GreenSettings overrides (TC01)
-    values: Optional[Dict[str, Any]] = None  # V3 pipeline values (TC01-06)
+    settings: Optional[Dict[str, Any]] = None  # GreenSettings overrides
 
 
 class StatusResponse(BaseModel):
@@ -168,186 +136,6 @@ def _file_for_id(job_id: str, file_id: str) -> Path:
     raise HTTPException(status_code=404, detail=f"file {file_id} not found in job {job_id}")
 
 
-
-# ============================================================
-# System stats helpers (CPU / RAM / Disk / GPU)
-# ============================================================
-_WORKER_START_TIME = time.time()
-
-def _safe_run(cmd, timeout=2):
-    """Run a shell command, return stdout or None on error."""
-    try:
-        r = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
-        return r.stdout.strip() if r.returncode == 0 else None
-    except Exception:
-        return None
-
-def _cpu_stats():
-    """Return dict with cpu info. Cross-platform (Linux/Mac)."""
-    out = {"percent": None, "count": None, "load_avg": None}
-    try:
-        import psutil  # type: ignore
-        # Prime the cpu_percent so first call returns a real value
-        psutil.cpu_percent(interval=None)
-        out["percent"] = psutil.cpu_percent(interval=0.1)
-        out["count"] = psutil.cpu_count(logical=True) or 0
-        la = psutil.getloadavg() if hasattr(psutil, "getloadavg") else None
-        out["load_avg"] = list(la) if la else None
-    except ImportError:
-        # Fallback: top
-        text = _safe_run(["sh", "-c", "top -bn1 | grep '^%Cpu' | head -1"])
-        if text:
-            try:
-                idle = float(text.split("id,")[0].split()[-1])
-                out["percent"] = round(100.0 - idle, 1)
-            except Exception: pass
-        out["count"] = os.cpu_count()
-        la_text = _safe_run(["sh", "-c", "cat /proc/loadavg 2>/dev/null || sysctl -n vm.loadavg"])
-        if la_text:
-            try:
-                out["load_avg"] = [float(x) for x in la_text.split()[:3]]
-            except Exception: pass
-    return out
-
-def _ram_stats():
-    """Return dict with RAM info in MB."""
-    out = {"total_mb": None, "used_mb": None, "percent": None}
-    try:
-        import psutil  # type: ignore
-        vm = psutil.virtual_memory()
-        out["total_mb"] = round(vm.total / 1024 / 1024)
-        out["used_mb"] = round(vm.used / 1024 / 1024)
-        out["percent"] = round(vm.percent, 1)
-    except ImportError:
-        # Linux: /proc/meminfo
-        text = _safe_run(["sh", "-c", "cat /proc/meminfo 2>/dev/null"])
-        if text:
-            try:
-                d = {}
-                for line in text.splitlines():
-                    if ":" in line:
-                        k, v = line.split(":", 1)
-                        d[k.strip()] = v.strip()
-                total_kb = int(d.get("MemTotal", "0").split()[0])
-                avail_kb = int(d.get("MemAvailable", d.get("MemFree", "0")).split()[0])
-                used_kb = total_kb - avail_kb
-                out["total_mb"] = round(total_kb / 1024)
-                out["used_mb"] = round(used_kb / 1024)
-                out["percent"] = round(100.0 * used_kb / max(total_kb, 1), 1)
-            except Exception: pass
-        # Mac fallback
-        if out["total_mb"] is None:
-            text = _safe_run(["sh", "-c", "sysctl -n hw.memsize"])
-            if text:
-                try:
-                    out["total_mb"] = int(int(text) / 1024 / 1024)
-                except Exception: pass
-            vm_text = _safe_run(["sh", "-c", "vm_stat | awk '/free/ {f=$3} /inactive/ {i=$3} END {print (f+i)*4096/1024/1024}'"])
-            if vm_text and out["total_mb"]:
-                try:
-                    free_mb = float(vm_text)
-                    out["used_mb"] = round(out["total_mb"] - free_mb)
-                    out["percent"] = round(100.0 * out["used_mb"] / out["total_mb"], 1)
-                except Exception: pass
-    return out
-
-def _disk_stats(path):
-    """Return disk usage for given path in GB."""
-    out = {"total_gb": None, "used_gb": None, "free_gb": None, "percent": None}
-    try:
-        import psutil  # type: ignore
-        u = psutil.disk_usage(path)
-        out["total_gb"] = round(u.total / 1024 / 1024 / 1024, 1)
-        out["used_gb"] = round(u.used / 1024 / 1024 / 1024, 1)
-        out["free_gb"] = round(u.free / 1024 / 1024 / 1024, 1)
-        out["percent"] = round(u.percent, 1)
-    except ImportError:
-        text = _safe_run(["sh", "-c", f"df -BG {path} 2>/dev/null | tail -1"])
-        if text:
-            try:
-                parts = text.split()
-                # /dev/xxx  100G  20G  80G  20%  /path
-                total = float(parts[1].rstrip("G"))
-                used = float(parts[2].rstrip("G"))
-                free = float(parts[3].rstrip("G"))
-                pct = float(parts[4].rstrip("%"))
-                out["total_gb"], out["used_gb"], out["free_gb"], out["percent"] = total, used, free, pct
-            except Exception: pass
-    return out
-
-def _gpu_nvidia_stats():
-    """Try nvidia-smi (NVIDIA GPUs)."""
-    text = _safe_run(["sh", "-c", "nvidia-smi --query-gpu=index,name,utilization.gpu,memory.used,memory.total,temperature.gpu --format=csv,noheader,nounits 2>/dev/null"])
-    if not text: return None
-    gpus = []
-    for line in text.splitlines():
-        if not line.strip(): continue
-        try:
-            parts = [p.strip() for p in line.split(",")]
-            if len(parts) < 6: continue
-            gpus.append({
-                "index": int(parts[0]),
-                "name": parts[1],
-                "util_pct": float(parts[2]) if parts[2] else None,
-                "vram_used_mb": int(parts[3]) if parts[3] else None,
-                "vram_total_mb": int(parts[4]) if parts[4] else None,
-                "temp_c": int(parts[5]) if parts[5] else None,
-            })
-        except Exception: pass
-    return gpus if gpus else None
-
-def _gpu_apple_stats():
-    """Apple Silicon (M1/M2/M3/M4) - try system_profiler + mlx info."""
-    text = _safe_run(["sh", "-c", "system_profiler SPDisplaysDataType 2>/dev/null | grep -E 'Chipset Model|VRAM|VRAM (Total)'"])
-    # Mac unified memory is shared with CPU; we approximate via total RAM and "GPU utilization" via mlx
-    out = _safe_run(["sh", "-c", "ioreg -l | grep -i 'gpu.*utilization' 2>/dev/null"])
-    return {
-        "platform": "apple_silicon",
-        "chip": _safe_run(["sh", "-c", "sysctl -n machdep.cpu.brand_string"]),
-        "unified_memory_mb": None,  # set by caller
-        "gpu_util_pct": None,  # not easily accessible
-    }
-
-def _system_stats():
-    """Bundle all system stats. Best-effort, all fields optional."""
-    ram = _ram_stats()
-    disk = _disk_stats(str(DATA_DIR))
-    cpu = _cpu_stats()
-    nvidia = _gpu_nvidia_stats()
-    is_apple = sys.platform == "darwin"
-    gpu_block = None
-    if nvidia:
-        # Aggregate: sum across all GPUs
-        vram_used = sum((g.get("vram_used_mb") or 0) for g in nvidia)
-        vram_total = sum((g.get("vram_total_mb") or 0) for g in nvidia)
-        util = max((g.get("util_pct") or 0) for g in nvidia)
-        temp = max((g.get("temp_c") or 0) for g in nvidia)
-        gpu_block = {
-            "platform": "nvidia",
-            "count": len(nvidia),
-            "gpus": nvidia,
-            "vram_used_mb": vram_used,
-            "vram_total_mb": vram_total,
-            "vram_percent": round(100.0 * vram_used / max(vram_total, 1), 1),
-            "util_pct": util,
-            "temp_c": temp,
-        }
-    elif is_apple:
-        ap = _gpu_apple_stats()
-        if ap: ap["unified_memory_mb"] = ram.get("total_mb")
-        gpu_block = ap
-    else:
-        gpu_block = {"platform": "none", "count": 0, "gpus": [],
-                     "vram_used_mb": 0, "vram_total_mb": 0, "vram_percent": 0,
-                     "util_pct": None, "temp_c": None}
-    return {
-        "cpu": cpu,
-        "ram": ram,
-        "disk": disk,
-        "gpu": gpu_block,
-        "uptime_sec": int(time.time() - _WORKER_START_TIME),
-    }
-
 # ============================================================
 # Health + capabilities
 # ============================================================
@@ -357,17 +145,6 @@ async def health():
     """Public health endpoint — gateway polls this every 2-5s."""
     gpu = gpu_summary()
     encoder = effective_video_encoder()
-    sys_stats = _system_stats()
-    # Active jobs = count of jobs in PG with status in (running, queued)
-    active_jobs = 0
-    try:
-        from app.backend.core.db_optional import _pg_conn  # type: ignore
-        with _pg_conn() as conn:
-            with conn.cursor() as cur:
-                cur.execute("SELECT COUNT(*) FROM v3_jobs WHERE status IN ('running','queued')")
-                active_jobs = int(cur.fetchone()[0] or 0)
-    except Exception:
-        pass  # PG may not be available; gateway tracks active via jobs PG too
     return {
         "ok": True,
         "worker_id": WORKER_ID,
@@ -376,8 +153,6 @@ async def health():
         "encoder": encoder,
         "supports_chromakey_cuda": ffmpeg_supports_encoder("h264_nvenc"),
         "data_dir": str(DATA_DIR),
-        "active_jobs": active_jobs,
-        "system": sys_stats,
     }
 
 
@@ -419,14 +194,10 @@ async def upload_file(
     body = await request.body()
     # Extract filename from Content-Disposition if present
     cd = request.headers.get("Content-Disposition", "")
-    fname = f"{role}_{int(time.time())}_{secrets.token_hex(4)}.mp4"  # default to .mp4 (V3 pipelines check ext)
+    fname = f"{role}_{int(time.time())}_{secrets.token_hex(4)}"
     if "filename=" in cd:
         try:
-            raw = cd.split("filename=", 1)[1].strip('"')
-            # If no extension, add .mp4 (pipelines require it)
-            if "." not in raw:
-                raw = raw + ".mp4"
-            fname = raw
+            fname = cd.split("filename=", 1)[1].strip('"')
         except Exception:
             pass
     target = jd / fname
@@ -444,84 +215,6 @@ async def upload_file(
 # ============================================================
 # Render (internal)
 # ============================================================
-
-
-def _build_pipeline_inputs(
-    mode: str,
-    jd: Path,
-    product_path: Optional[Path],
-    background_path: Optional[Path],
-    cover_path: Optional[Path],
-    audio_path: Optional[Path],
-    settings: Dict[str, Any],
-    product_paths: List[Path] = None,
-    background_paths: List[Path] = None,
-    cover_paths: List[Path] = None,
-    audio_paths: List[Path] = None,
-    source_paths: List[Path] = None,
-) -> "_common.PipelineInputs":
-    """Build a PipelineInputs from worker request fields. The shape varies per TC:
-    - tc01/tc02/tc03/tc04: product + bg (lists OK)
-    - tc05: source only (reframe, no chroma)
-    - tc06: product + bg + audio (audio master)
-    """
-    if product_paths is None: product_paths = []
-    if background_paths is None: background_paths = []
-    if cover_paths is None: cover_paths = []
-    if audio_paths is None: audio_paths = []
-    if source_paths is None: source_paths = []
-    if product_path and not product_paths: product_paths = [product_path]
-    if background_path and not background_paths: background_paths = [background_path]
-    if cover_path and not cover_paths: cover_paths = [cover_path]
-    if audio_path and not audio_paths: audio_paths = [audio_path]
-    return _common.PipelineInputs(
-        output_dir=str(jd),
-        values=settings or {},
-        products=[str(p) for p in product_paths],
-        backgrounds=[str(p) for p in background_paths],
-        audios=[str(p) for p in audio_paths],
-        covers=[str(p) for p in cover_paths],
-        sources=[str(p) for p in source_paths],
-    )
-
-
-def _run_v3_pipeline(
-    mode: str,
-    job_id: str,
-    jd: Path,
-    product_path: Optional[Path],
-    background_path: Optional[Path],
-    cover_path: Optional[Path],
-    audio_path: Optional[Path],
-    settings: Dict[str, Any],
-    log_cb,
-    progress_cb=None,
-    product_paths: List[Path] = None,
-    background_paths: List[Path] = None,
-    cover_paths: List[Path] = None,
-    audio_paths: List[Path] = None,
-    source_paths: List[Path] = None,
-) -> Dict[str, Any]:
-    """Run a V3 TC01-TC06 pipeline. Returns dict with status, output_files, etc."""
-    pipeline_fn = PIPELINES.get(mode)
-    if not pipeline_fn:
-        raise ValueError(f"Unknown mode: {mode}")
-    inputs = _build_pipeline_inputs(
-        mode, jd, product_path, background_path, cover_path, audio_path,
-        settings, product_paths, background_paths, cover_paths, audio_paths, source_paths,
-    )
-    callbacks = _common.PipelineCallbacks(
-        log_fn=log_cb,
-        stop_check=lambda: False,
-        progress_fn=(progress_cb or (lambda pct, info: None)),
-        file_fn=lambda fn: log_cb(f"[file] {fn}"),
-        pause_check=lambda: False,
-        step_fn=lambda step, state: log_cb(f"[step] {step}: {state}"),
-    )
-    result = pipeline_fn(inputs, callbacks)
-    payload = result.to_dict() if hasattr(result, "to_dict") else {"status": "unknown"}
-    return payload
-
 
 @app.post("/v1/jobs/{job_id}/render")
 async def render_job(job_id: str, req: RenderRequest, _: bool = Depends(_verify_internal)):
@@ -557,98 +250,7 @@ async def render_job(job_id: str, req: RenderRequest, _: bool = Depends(_verify_
             "worker_id": WORKER_ID,
         }
 
-    # Dispatch by mode
-    mode = (req.mode or "tc01").lower()
-    log.info(f"job={job_id} mode={mode}")
-
-    # V3 pipeline (TC01-TC06) — uses core.pipelines
-    if mode in PIPELINES and PIPELINES.get(mode) is not None:
-        def progress_cb(pct, info):
-            log_cb(f"[progress] {pct}% {info}")
-            with _JOBS_LOCK:
-                _JOBS[job_id].setdefault("progress_pct", int(pct))
-                _JOBS[job_id].setdefault("progress_info", str(info))
-        try:
-            payload = _run_v3_pipeline(
-                mode=mode,
-                job_id=job_id,
-                jd=jd,
-                product_path=product,
-                background_path=background,
-                cover_path=cover,
-                audio_path=audio,
-                settings=req.values or req.settings or {},
-                log_cb=log_cb,
-                progress_cb=progress_cb,
-                product_paths=[_file_for_id(job_id, fid) for fid in (req.product_ids or [])] or ([product] if product else []),
-                background_paths=[_file_for_id(job_id, fid) for fid in (req.background_ids or [])] or ([background] if background else []),
-                cover_paths=[_file_for_id(job_id, fid) for fid in (req.cover_ids or [])] or ([cover] if cover else []),
-                audio_paths=[_file_for_id(job_id, fid) for fid in (req.audio_ids or [])] or ([audio] if audio else []),
-                source_paths=[_file_for_id(job_id, fid) for fid in (req.source_ids or [])],
-            )
-        except Exception as exc:
-            log.error(f"job={job_id} {mode} crashed: {exc}")
-            with _JOBS_LOCK:
-                _JOBS[job_id].update({
-                    "status": "failed", "error": str(exc),
-                    "finished_at": time.time(), "log": log_lines,
-                })
-            raise HTTPException(status_code=500, detail=f"{mode} crashed: {exc}")
-        # payload has status, outputs (list of files), errors, etc.
-        elapsed = time.time() - t0
-        status = payload.get("status", "unknown")
-        output_files = payload.get("outputs", [])
-        # Pick first output as the main one
-        output_file = output_files[0] if output_files else None
-        if not output_file:
-            # Pipeline didn't produce output_path key — try a fallback
-            output_file = payload.get("output_path")
-        if not output_file:
-            # scan the job dir for the newest mp4
-            mp4s = sorted(jd.glob("*.mp4"), key=lambda p: p.stat().st_mtime, reverse=True)
-            if mp4s:
-                output_file = mp4s[0].name
-        if not output_file:
-            with _JOBS_LOCK:
-                _JOBS[job_id].update({
-                    "status": "failed", "error": payload.get("errors", ["no output"])[0] if payload.get("errors") else "no output produced",
-                    "finished_at": time.time(), "log": log_lines, "result": payload,
-                })
-            raise HTTPException(status_code=500, detail=f"{mode} produced no output: {payload.get('errors', ['unknown'])}")
-        out_path = jd / output_file
-        output_size = out_path.stat().st_size if out_path.exists() else 0
-        log.info(f"job={job_id} {mode} done in {elapsed:.1f}s, {output_size} bytes, {len(output_files)} outputs")
-        # Normalize status to lowercase
-        status_norm = str(status).lower() if status else "succeeded"
-        if "fail" in status_norm: status_norm = "failed"
-        elif "cancel" in status_norm: status_norm = "cancelled"
-        elif "success" in status_norm or status_norm == "succeeded": status_norm = "succeeded"
-        else: status_norm = "succeeded" if not payload.get("errors") else "failed"
-        with _JOBS_LOCK:
-            _JOBS[job_id].update({
-                "status": status_norm,
-                "finished_at": time.time(),
-                "output_file": output_file,
-                "output_size": output_size,
-                "output_files": output_files,
-                "duration_sec": elapsed,
-                "encoder": settings.encoder_alias,
-                "log": log_lines[-50:],
-                "result": payload,
-                "progress_pct": 100 if status_norm == "succeeded" else 0,
-            })
-        return {
-            "job_id": job_id,
-            "status": status_norm,
-            "output_file": output_file,
-            "output_files": output_files,
-            "output_size": output_size,
-            "duration_sec": elapsed,
-            "encoder": settings.encoder_alias,
-            "log_lines": log_lines[-20:],
-        }
-
-    # Fallback: simple render_green (legacy single-product chroma)
+    # Run render
     try:
         result: FfmpegResult = render_green(
             cover=str(cover) if cover else None,
@@ -692,7 +294,7 @@ async def render_job(job_id: str, req: RenderRequest, _: bool = Depends(_verify_
             "output_size": output_size,
             "duration_sec": elapsed,
             "encoder": settings.encoder_alias,
-            "log": log_lines[-50:],
+            "log": log_lines[-50:],  # keep last 50 lines
         })
 
     return {
@@ -703,6 +305,181 @@ async def render_job(job_id: str, req: RenderRequest, _: bool = Depends(_verify_
         "duration_sec": elapsed,
         "encoder": settings.encoder_alias,
     }
+
+
+# ============================================================
+# TC02-TC06 pipeline render (v3.PARALLEL: parallel chroma for TC02)
+# ============================================================
+
+class TCRenderRequest(BaseModel):
+    """Multi-file render request used by TC02/TC03/TC05/TC06.
+    
+    product_ids/background_ids/cover_ids/audio_ids/source_ids are lists
+    of uploaded file ids (filename stem). For TC01 the singular
+    product_id/background_id/cover_id/audio_id fields are also accepted.
+    """
+    product_id: Optional[str] = None
+    background_id: Optional[str] = None
+    cover_id: Optional[str] = None
+    audio_id: Optional[str] = None
+    product_ids: List[str] = []
+    background_ids: List[str] = []
+    cover_ids: List[str] = []
+    audio_ids: List[str] = []
+    source_ids: List[str] = []
+    mode: Optional[str] = None
+    settings: Optional[Dict[str, Any]] = None
+    values: Optional[Dict[str, Any]] = None
+
+
+def _file_for_id_or_path(job_id: str, file_id: str) -> Path:
+    """Resolve file_id (stem) to a path; raise 404 if not found."""
+    return _file_for_id(job_id, file_id)
+
+
+def _build_tc_inputs(job_id: str, req: TCRenderRequest) -> tuple:
+    """Convert TCRenderRequest to PipelineInputs lists of file paths."""
+    def resolve(ids: List[str]) -> List[str]:
+        out = []
+        for fid in ids:
+            try:
+                out.append(str(_file_for_id_or_path(job_id, fid)))
+            except HTTPException:
+                continue
+        return out
+    products = resolve(req.product_ids) or ([str(_file_for_id_or_path(job_id, req.product_id))] if req.product_id else [])
+    backgrounds = resolve(req.background_ids) or ([str(_file_for_id_or_path(job_id, req.background_id))] if req.background_id else [])
+    audios = resolve(req.audio_ids) or ([str(_file_for_id_or_path(job_id, req.audio_id))] if req.audio_id else [])
+    covers = resolve(req.cover_ids) or ([str(_file_for_id_or_path(job_id, req.cover_id))] if req.cover_id else [])
+    return products, backgrounds, audios, covers
+
+
+def _run_tc_pipeline(tc_label: str, render_fn, job_id: str, req: TCRenderRequest):
+    """Generic TC01-TC06 runner that returns a JSON-serializable result."""
+    t0 = time.time()
+    jd = _job_dir(job_id)
+    out_dir = jd  # TC01 outputs to job dir, TC02/etc. use subfolders
+    log_lines: List[str] = []
+
+    def log_cb(msg: str):
+        log_lines.append(msg)
+        log.info(f"[{job_id}] {msg}")
+
+    try:
+        products, backgrounds, audios, covers = _build_tc_inputs(job_id, req)
+    except HTTPException:
+        raise
+
+    values = req.values or req.settings or {}
+    n_parallel = int(os.environ.get(f"V3_{tc_label.upper()}_PARALLEL", os.environ.get("V3_TC02_PARALLEL", "1") or "1"))
+
+    with _JOBS_LOCK:
+        _JOBS[job_id] = {
+            "status": "running",
+            "started_at": t0,
+            "worker_id": WORKER_ID,
+            "tc": tc_label,
+        }
+
+    try:
+        from core.pipelines._common import PipelineInputs, PipelineCallbacks
+        inputs = PipelineInputs(
+            output_dir=str(out_dir),
+            values=values,
+            products=products,
+            backgrounds=backgrounds,
+            audios=audios,
+            covers=covers,
+        )
+        cb = PipelineCallbacks(
+            log_fn=log_cb,
+            stop_check=lambda: False,
+            progress_fn=lambda pct, msg: None,
+            file_fn=lambda n: None,
+            pause_check=lambda: False,
+        )
+        result = render_fn(inputs, cb)
+    except Exception as exc:
+        log.error(f"job={job_id} {tc_label} crashed: {exc}")
+        with _JOBS_LOCK:
+            _JOBS[job_id].update({
+                "status": "failed",
+                "error": str(exc),
+                "finished_at": time.time(),
+                "log": log_lines,
+            })
+        raise HTTPException(status_code=500, detail=f"{tc_label} render crashed: {exc}")
+
+    elapsed = time.time() - t0
+    output_files = []
+    for f in jd.iterdir():
+        if f.suffix == ".mp4" and not f.name.endswith(".partial.*"):
+            output_files.append(f.name)
+    output_files.sort()
+
+    status = result.status.value if hasattr(result.status, "value") else str(result.status)
+    with _JOBS_LOCK:
+        _JOBS[job_id].update({
+            "status": "succeeded" if result.is_success else status.lower(),
+            "finished_at": time.time(),
+            "output_file": output_files[0] if output_files else None,
+            "output_size": (jd / output_files[0]).stat().st_size if output_files else 0,
+            "duration_sec": elapsed,
+            "encoder": values.get("encoder_alias", "libx264"),
+            "log": log_lines[-50:],
+        })
+
+    return {
+        "job_id": job_id,
+        "tc": tc_label,
+        "status": status,
+        "expected": result.expected,
+        "succeeded": result.succeeded,
+        "failed": result.failed,
+        "cancelled": result.cancelled,
+        "output_files": output_files,
+        "output_file": output_files[0] if output_files else None,
+        "output_size": (jd / output_files[0]).stat().st_size if output_files else 0,
+        "duration_sec": elapsed,
+        "encoder": values.get("encoder_alias", "libx264"),
+        "n_parallel": n_parallel,
+    }
+
+
+# TC01 (multi-file capable)
+@app.post("/v1/tc01/render/{job_id}")
+async def render_tc01_endpoint(job_id: str, req: TCRenderRequest, _: bool = Depends(_verify_internal)):
+    return _run_tc_pipeline("TC01", render_tc01, job_id, req)
+
+
+# TC02 (reframe + chroma with optional parallel chroma)
+@app.post("/v1/tc02/render/{job_id}")
+async def render_tc02_endpoint(job_id: str, req: TCRenderRequest, _: bool = Depends(_verify_internal)):
+    return _run_tc_pipeline("TC02", render_tc02, job_id, req)
+
+
+# TC03
+@app.post("/v1/tc03/render/{job_id}")
+async def render_tc03_endpoint(job_id: str, req: TCRenderRequest, _: bool = Depends(_verify_internal)):
+    return _run_tc_pipeline("TC03", render_tc03, job_id, req)
+
+
+# TC04
+@app.post("/v1/tc04/render/{job_id}")
+async def render_tc04_endpoint(job_id: str, req: TCRenderRequest, _: bool = Depends(_verify_internal)):
+    return _run_tc_pipeline("TC04", render_tc04, job_id, req)
+
+
+# TC05
+@app.post("/v1/tc05/render/{job_id}")
+async def render_tc05_endpoint(job_id: str, req: TCRenderRequest, _: bool = Depends(_verify_internal)):
+    return _run_tc_pipeline("TC05", render_tc05, job_id, req)
+
+
+# TC06
+@app.post("/v1/tc06/render/{job_id}")
+async def render_tc06_endpoint(job_id: str, req: TCRenderRequest, _: bool = Depends(_verify_internal)):
+    return _run_tc_pipeline("TC06", render_tc06, job_id, req)
 
 
 # ============================================================
@@ -730,22 +507,13 @@ async def get_status(job_id: str, _: bool = Depends(_verify_internal)):
 
 @app.get("/v1/jobs/{job_id}/output")
 async def get_output(job_id: str, filename: str, _: bool = Depends(_verify_internal)):
-    """Return any file in the job dir (output or input). Strict path check to prevent traversal."""
     jd = _job_dir(job_id)
     target = jd / filename
-    # Prevent path traversal: filename must be a single component
-    if "/" in filename or "\\" in filename or filename.startswith(".") or ".." in filename:
-        raise HTTPException(status_code=400, detail="invalid filename")
-    if not target.is_file():
+    if not target.is_file() or not target.name.startswith("output_"):
         raise HTTPException(status_code=404, detail="output not found")
-    media_type = "video/mp4"
-    if filename.endswith(".wav"):
-        media_type = "audio/wav"
-    elif filename.endswith(".mp3"):
-        media_type = "audio/mpeg"
     return FileResponse(
         target,
-        media_type=media_type,
+        media_type="video/mp4",
         filename=filename,
     )
 
@@ -771,19 +539,6 @@ async def cleanup(days: int = 7, _: bool = Depends(_verify_internal)):
             log.warning(f"cleanup {jd}: {e}")
     return {"removed_jobs": removed, "freed_mb": round(freed_bytes / 1024 / 1024, 2)}
 
-
-
-# === V3 WebApp-compatible TC aliases (POST /v1/tc0X/render) ===
-def _make_tc_handler(tc_name: str):
-    async def _handler(job_id: str, req: RenderRequest, _: bool = Depends(_verify_internal)):
-        """Alias for /v1/jobs/{job_id}/render with the right mode set."""
-        req.mode = tc_name
-        return await render_job(job_id, req, _)
-    _handler.__name__ = f"render_{tc_name}"
-    return _handler
-
-for _tc in ("tc01", "tc02", "tc03", "tc04", "tc05", "tc06"):
-    app.post(f"/v1/{_tc}/render/" + "{job_id}")(_make_tc_handler(_tc))
 
 if __name__ == "__main__":
     import uvicorn
