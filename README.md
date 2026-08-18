@@ -106,8 +106,8 @@ BG=$(curl -sk -X POST $BASE/api/v1/uploads/background \
   -H "Authorization: Bearer $KEY" \
   --data-binary @bg.mp4)
 
-# 2. Create + render
-curl -sk -X POST $BASE/api/v1/jobs \
+# 2. Create + enqueue render (returns queued job)
+JOB=$(curl -sk -X POST $BASE/api/v1/jobs \
   -H "Authorization: Bearer $KEY" \
   -H "Content-Type: application/json" \
   -d "{
@@ -117,10 +117,17 @@ curl -sk -X POST $BASE/api/v1/jobs \
       \"width\":1080,\"height\":1920,\"fps\":30,
       \"key_color\":\"#00FF00\",\"similarity\":0.4,\"blend\":0.04
     }
-  }"
+  }" | python3 -c 'import sys,json; print(json.load(sys.stdin)["job_id"])')
 
-# 3. Download
-curl -sk -o output.mp4 $BASE/api/v1/jobs/<JOB_ID>/download/output_*.mp4 \
+# 3. Poll until the Worker publishes the output manifest
+until curl -sk $BASE/api/v1/jobs/$JOB -H "Authorization: Bearer $KEY" \
+  | python3 -c 'import sys,json; print(json.load(sys.stdin).get("status") in ("succeeded","failed","cancelled"))' \
+  | grep -q True; do
+  sleep 2
+done
+
+# 4. Download
+curl -sk -o output.mp4 $BASE/api/v1/jobs/$JOB/download/output_*.mp4 \
   -H "Authorization: Bearer $KEY"
 ```
 
@@ -130,7 +137,7 @@ PostgreSQL via PgBouncer (transaction mode, SCRAM-SHA-256).
 
 - DB: `v3_cursor_api` (new database, create with `CREATE DATABASE v3_cursor_api;`)
 - User: `postgres` (or dedicated `v3_cursor_api` user)
-- Schema: `v3_jobs` (auto-created on gateway startup)
+- Table: `v3_jobs` (auto-created on gateway startup; PostgreSQL schema remains the database default)
 
 PgBouncer config: add database to `/etc/pgbouncer/pgbouncer.ini`:
 ```ini
@@ -144,6 +151,9 @@ v3_cursor_api_pool = host=127.0.0.1 port=5432 dbname=v3_cursor_api pool_size=10
 `/etc/v3-cursor-api/gateway.env`:
 ```bash
 CUTDEE_INTERNAL_TOKEN=v3-api-internal-token-2026
+CUTDEE_API_KEYS=<comma-separated-client-keys>
+CUTDEE_ADMIN_API_KEY=<optional-admin-key>
+CUTDEE_API_VERSION=1.2.0
 GATEWAY_PORT=8788
 GATEWAY_DATA_DIR=/var/lib/v3-cursor-api/gateway
 CUTDEE_PG_HOST=127.0.0.1
@@ -159,6 +169,10 @@ CUTDEE_INTERNAL_TOKEN=<must match gateway>
 WORKER_PORT=8789
 WORKER_ID=<unique-id-per-host>
 WORKER_DATA_DIR=/var/lib/v3-cursor-api/worker
+WORKER_MAX_CONCURRENT=2
+WORKER_MAX_QUEUE=4
+V3_API_VERSION=1.2.0
+V3_BUILD_COMMIT=<release-commit>
 ```
 
 ## Adding workers
@@ -231,7 +245,8 @@ The pinned `pydantic==2.9` requires Python **≤ 3.13** (pydantic-core 2.23 / py
 
 - [ ] WebSocket progress streaming (currently poll `/api/v1/jobs/{id}`)
 - [ ] Resume checkpoint (currently no resume on worker crash)
-- [ ] Multi-mode (TC02 reframe, TC03 batch, etc.) — currently TC01 only
+- [x] Multi-mode TC01-TC06 pipeline dispatch
+- [ ] Full production media acceptance matrix for TC01-TC06
 - [ ] Web UI (vanilla HTML+JS like `cluster_dashboard.html`)
 - [ ] Cloudflare R2 / S3 storage for outputs (currently local disk)
 - [ ] Stripe topup + credit system (like api.cutdee.com)
@@ -240,10 +255,10 @@ The pinned `pydantic==2.9` requires Python **≤ 3.13** (pydantic-core 2.23 / py
 
 - **Path-based `/v3api/` proxy** — preserves existing `green.cutdee.com` AutoMix app on `/`
 - **PG via PgBouncer** — same as cutdee-cluster (api.cutdee.com), reuses existing infrastructure
-- **In-process worker dispatch** — gateway uses httpx async to forward jobs (no separate queue service)
+- **Bounded worker executor** — Worker accepts jobs quickly and runs FFmpeg outside the FastAPI event loop; Gateway monitors status asynchronously
 - **Job state in PG** — gateway is stateless for HA (any number of gateways can share state)
 - **Workers own their files** — gateway forwards uploaded bytes, worker stores locally (saves bandwidth on hub)
-- **No resume on crash** — for v1.0, job is lost if worker dies mid-render (can be added)
+- **Cooperative control** — cancel/pause/resume signals are carried to the Worker; a worker restart still requires job recovery policy
 
 ## Logs
 

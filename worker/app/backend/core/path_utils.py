@@ -15,6 +15,17 @@ from pathlib import Path
 from typing import Optional
 
 
+def portable_basename(path: str) -> str:
+    """Return a basename for either POSIX or Windows-style input paths."""
+    text = str(path or "").replace("\\", "/")
+    return text.rsplit("/", 1)[-1]
+
+
+def portable_stem(path: str) -> str:
+    """Return a stem for either POSIX or Windows-style input paths."""
+    return Path(portable_basename(path)).stem
+
+
 def _validate_path(path: str) -> Optional[str]:
     """Return the absolute path if it exists on disk, otherwise None.
 

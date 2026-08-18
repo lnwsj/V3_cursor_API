@@ -106,7 +106,7 @@ OUTPUT_DIMENSION_MAX = 3840
 OUTPUT_FPS_MIN = 15
 OUTPUT_FPS_MAX = 60
 REFRAME_PARALLEL_MIN = 1
-REFRAME_PARALLEL_MAX = 10
+REFRAME_PARALLEL_MAX = 3
 VALID_REFRAME_MODES = frozenset({"speed", "lite_tilt", "legacy"})
 # FIX (2026-07-31): macOS-only h264_videotoolbox option surfaced in UI.
 # On non-darwin it's not appended so Windows / Linux users don't see an
@@ -643,8 +643,8 @@ def reframe_settings_for(
         reframe_mode=validate_reframe_mode(
             values.get("reframe_mode", "speed")
         ),
-        # v3.REFRAME_720P: 0=full output, N=N-p short side. Env: V3_REFRAME_SHORT_SIDE
-        # Default 720 — optimal for 4K inputs (-16% TC02, identical output quality)
+        # 0=full output, N=N-p short side. Env: V3_REFRAME_SHORT_SIDE.
+        # Keep the reference contract at full resolution by default.
         # CRITICAL: 0 is a VALID value (disable), so do NOT use `or` fallbacks that
         # would replace 0 with the default. Read env to a local first.
         reframe_short_side=_read_reframe_short_side(values),
@@ -662,7 +662,7 @@ def _read_reframe_short_side(values: Dict[str, Any]) -> int:
     env_val = os.getenv("V3_REFRAME_SHORT_SIDE")
     if env_val and env_val.strip():
         return int(env_val)
-    return 720
+    return 0
 
 def batch_settings_for(
     *,
@@ -781,7 +781,7 @@ def pick_compositions(values: Mapping[str, Any], *, all_three_default: bool = Tr
         ("use_left", "left"),
         ("use_right", "right"),
     ):
-        enabled = values[key] if key in values else on_default
+        enabled = values[key] if key in values and values[key] is not None else on_default
         if not isinstance(enabled, bool):
             raise ValueError(f"{key} must be a boolean; got {enabled!r}")
         if enabled:

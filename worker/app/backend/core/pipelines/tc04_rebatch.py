@@ -13,7 +13,12 @@ all intermediate files exist and are non-zero.
 from __future__ import annotations
 
 import os
+import concurrent.futures
 from datetime import datetime
+
+# v3.PARALLEL (2026-08-18): TC04 chroma stage parallel ffmpegs.
+# Default 1 (sequential) preserved for backward compat; env V3_TC04_PARALLEL overrides.
+_TC04_PARALLEL = max(1, int(os.environ.get("V3_TC04_PARALLEL", "1") or "1"))
 from typing import Any, Callable, Dict, Iterable, List, Tuple
 
 from ..ai_reframe import ReframeSettings, render_reframe_plan
@@ -311,15 +316,22 @@ def _skip_batch_result(
         paused=paused,
         cancel_requested=cancel_requested,
     )
+    reframe_outputs: List[Any] = []
+    reframe_succeeded = 0
+    if reframe_stage and reframe_stage.valid_output_count > 0:
+        reframe_outputs = list(reframe_stage.outputs)[:reframe_stage.valid_output_count]
+        reframe_succeeded = len(reframe_outputs)
     return finalize_pipeline_result(
         PipelineResult(
             pipeline="TC04",
-            expected=expected_final,
+            expected=expected_final + reframe_succeeded,
+            succeeded=reframe_succeeded,
             skipped=downstream_skipped,
             cancelled=downstream_cancelled,
+            outputs=reframe_outputs,
             stages=[reframe_stage, batch_stage],
             errors=[message],
-            metadata=metadata,
+            metadata={**metadata, "reframe_outputs_surfaced": reframe_succeeded},
         ),
         paused=paused,
         cancel_requested=cancel_requested,
@@ -888,7 +900,7 @@ def render(inputs: PipelineInputs, cb: PipelineCallbacks) -> PipelineResult:
             on_progress=on_batch_progress,
             stop_check=stop,
             tc_label="TC04",
-            chroma_max_parallel=1,
+            chroma_max_parallel=_TC04_PARALLEL,
             run_stamp=run_stamp,
             pre_validated_outputs=batch_pre_validated,
         )

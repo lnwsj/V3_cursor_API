@@ -11,7 +11,12 @@ set -e
 
 ROLE="${1:-all}"
 SERVICE_USER="v3api"
-INTERNAL_TOKEN="${CUTDEE_INTERNAL_TOKEN:-dev-internal-token-change-me}"
+INTERNAL_TOKEN="${CUTDEE_INTERNAL_TOKEN:-}"
+API_VERSION="${CUTDEE_API_VERSION:-1.2.0}"
+if [[ -z "$INTERNAL_TOKEN" ]]; then
+    INTERNAL_TOKEN="$(python3 -c 'import secrets; print(secrets.token_urlsafe(32))')"
+    echo "Generated an internal gateway-worker token for this installation."
+fi
 
 echo "==================================="
 echo "V3_cursor_API installer (role=$ROLE)"
@@ -26,6 +31,8 @@ fi
 # 2. Repo dir
 REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 echo "[2/5] Repo: $REPO_DIR"
+BUILD_COMMIT="$(git -C "$REPO_DIR" rev-parse --short HEAD 2>/dev/null || true)"
+BUILD_COMMIT="${BUILD_COMMIT:-unknown}"
 
 # 3. Venv + deps (in repo, not copy — repo IS install dir)
 #
@@ -136,11 +143,15 @@ User=$SERVICE_USER
 Group=$SERVICE_USER
 WorkingDirectory=$REPO_DIR/gateway
 EnvironmentFile=/etc/v3-cursor-api/gateway.env
+Environment=CUTDEE_API_VERSION=$API_VERSION
+Environment=V3_BUILD_COMMIT=$BUILD_COMMIT
 ExecStart=$REPO_DIR/gateway/.venv/bin/python3 -m uvicorn app.backend.main:app --host 0.0.0.0 --port 8788
 Restart=always
 RestartSec=5
 MemoryHigh=2G
 MemoryMax=4G
+TimeoutStopSec=30
+KillMode=control-group
 StandardOutput=append:/var/log/v3-cursor-api/gateway.log
 StandardError=append:/var/log/v3-cursor-api/gateway.log
 
@@ -150,6 +161,10 @@ EOF
     if [ ! -f /etc/v3-cursor-api/gateway.env ]; then
         cat > /etc/v3-cursor-api/gateway.env << EOF
 CUTDEE_INTERNAL_TOKEN=$INTERNAL_TOKEN
+CUTDEE_API_KEYS=${CUTDEE_API_KEYS:-}
+CUTDEE_ADMIN_API_KEY=${CUTDEE_ADMIN_API_KEY:-}
+CUTDEE_API_VERSION=$API_VERSION
+V3_BUILD_COMMIT=$BUILD_COMMIT
 GATEWAY_PORT=8788
 GATEWAY_DATA_DIR=/var/lib/v3-cursor-api/gateway
 CUTDEE_PG_HOST=127.0.0.1
@@ -196,11 +211,15 @@ User=$SERVICE_USER
 Group=$SERVICE_USER
 WorkingDirectory=$REPO_DIR/worker
 EnvironmentFile=/etc/v3-cursor-api/worker.env
+Environment=V3_API_VERSION=$API_VERSION
+Environment=V3_BUILD_COMMIT=$BUILD_COMMIT
 ExecStart=$REPO_DIR/worker/.venv/bin/python3 -m uvicorn app.backend.main:app --host 0.0.0.0 --port 8789
 Restart=always
 RestartSec=5
 MemoryHigh=4G
 MemoryMax=8G
+TimeoutStopSec=30
+KillMode=control-group
 StandardOutput=append:/var/log/v3-cursor-api/worker.log
 StandardError=append:/var/log/v3-cursor-api/worker.log
 
@@ -213,6 +232,10 @@ CUTDEE_INTERNAL_TOKEN=$INTERNAL_TOKEN
 WORKER_PORT=8789
 WORKER_ID=$(hostname)-cpu-01
 WORKER_DATA_DIR=/var/lib/v3-cursor-api/worker
+WORKER_MAX_CONCURRENT=${WORKER_MAX_CONCURRENT:-2}
+WORKER_MAX_QUEUE=${WORKER_MAX_QUEUE:-4}
+V3_API_VERSION=$API_VERSION
+V3_BUILD_COMMIT=$BUILD_COMMIT
 EOF
         chmod 600 /etc/v3-cursor-api/worker.env
     fi

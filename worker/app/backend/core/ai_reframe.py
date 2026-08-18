@@ -45,6 +45,7 @@ from .media_probe import (
     has_video_stream,
 )
 from .encoder_recovery import remove_partial, should_retry_with_cpu
+from .path_utils import portable_stem
 
 
 VIDEO_EXTS = (".mp4", ".mkv", ".mov", ".m4v", ".avi", ".webm")
@@ -521,11 +522,10 @@ class ReframeSettings:
     # Explicit values still respected (UI can override).
     max_parallel_ffmpeg: int = 0          # 0=auto-scale from cpu_count
 
-    # v3.REFRAME_720P: 0=full target output res, N=work at N-p short side then
-    # upscale later (in chroma stage). Default 720 (optimal for 4K inputs).
+    # 0=full target output resolution, N=work at N-p short side then upscale
+    # later in the chroma stage. The reference contract defaults to full res.
     # Set to 0 for full-res reframe (best for 1080p or lower source content).
-    # 4K (3840x2160) reframe at 720p saves ~16% on TC02 with identical output quality.
-    reframe_short_side: int = 720  # default 720; set to 0 to disable
+    reframe_short_side: int = 0
 
 
 # ==================== Build Reframe Plan ====================
@@ -597,7 +597,7 @@ def build_reframe_tasks(
         srcs = srcs[:settings.max_sources]
     stem_counts: Dict[str, int] = {}
     for source in srcs:
-        stem_key = Path(source).stem.casefold()
+        stem_key = portable_stem(source).casefold()
         stem_counts[stem_key] = stem_counts.get(stem_key, 0) + 1
 
 
@@ -605,7 +605,7 @@ def build_reframe_tasks(
     os.makedirs(out_dir, exist_ok=True)
     tasks: List[ReframeTask] = []
     for src_idx, src in enumerate(srcs, 1):
-        src_base = os.path.splitext(os.path.basename(src))[0]
+        src_base = portable_stem(src)
         output_base = (
             src_base if stem_counts[src_base.casefold()] == 1
             else f"{src_base}__src{src_idx:03d}"
@@ -1113,7 +1113,7 @@ def render_reframe_plan(
         else:
             _requested = 6
         log(f"[reframe] auto max_parallel={_requested} (cpu_count={_ncpu})")
-    max_parallel = max(1, min(_requested, 10))
+    max_parallel = max(1, min(_requested, 3))
 
     task_order = {id(task): index for index, task in enumerate(tasks)}
     # Use a ThreadPoolExecutor (ported from _run_fixed_ffmpeg_reframe).

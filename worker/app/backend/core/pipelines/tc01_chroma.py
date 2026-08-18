@@ -50,6 +50,7 @@ from ._common import (
     safe_progress,
     shuffle_pool,
 )
+from ..path_utils import portable_stem
 
 
 TC01_DEFAULTS = TC01_VIDEO_DEFAULTS
@@ -130,8 +131,20 @@ def _seed_from_values(values: Mapping[str, Any]) -> int:
 
 
 def _safe_output_stem(path: str) -> str:
-    stem = Path(path).stem.strip()
+    stem = portable_stem(path).strip()
     return stem or "product"
+
+
+def _extract_progress_pct(progress: Any) -> float:
+    """Accept FfmpegProgress objects, numbers, and mapping payloads."""
+    if isinstance(progress, Mapping):
+        progress = progress.get("pct", progress.get("percent", 0.0))
+    else:
+        progress = getattr(progress, "pct", progress)
+    try:
+        return max(0.0, min(100.0, float(progress)))
+    except (TypeError, ValueError):
+        return 0.0
 
 
 def _build_tasks(
@@ -589,11 +602,7 @@ def render(inputs: PipelineInputs, cb: PipelineCallbacks) -> PipelineResult:
         safe_file(cb.file_fn, product)
 
         def _on_core_progress(progress, _slot=slot, _total=total):
-            pct = getattr(
-                progress,
-                "pct",
-                float(progress) if isinstance(progress, (int, float)) else 0.0,
-            )
+            pct = _extract_progress_pct(progress)
             overall = ((_slot - 1) + pct / 100.0) / _total * 100.0
             safe_progress(cb.progress_fn, overall, f"Task {_slot}/{_total} ({pct:.0f}%)")
 

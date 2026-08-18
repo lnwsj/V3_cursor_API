@@ -48,6 +48,31 @@
 
 เหตุผลคือ ถ้ายังมี worker หลาย revision และ health ถูกบล็อก จะไม่สามารถระบุสาเหตุของผลลัพธ์หรือวัดผลการแก้ไขได้อย่างน่าเชื่อถือ
 
+### 1.4 สถานะ implementation หลังเริ่ม remediation
+
+หลังจากสร้าง baseline แล้ว working tree ชุดปัจจุบันได้เริ่มแก้ P0/P1 ใน source ดังนี้:
+
+- Worker ใช้ bounded `ThreadPoolExecutor` และคืนสถานะ `queued` ก่อนเริ่ม FFmpeg
+- Worker persist `.job_state.json` และ output manifest ต่อ job
+- Gateway monitor Worker status แบบ asynchronous และ lazy refresh ตอนอ่าน job
+- เพิ่ม source และ product-root input bridge รวมถึง safe ZIP extraction
+- เพิ่ม canonical status normalization และ safe output filename validation
+- แก้ Gateway upload ให้รักษา media extension
+- เพิ่ม dry-run planner ที่คำนวณ TC02-TC06 ตาม input/settings
+- sync parity บางส่วน: reframe cap 3, full-resolution default, null composition fallback, portable path และ TC01 mapping progress
+- เพิ่ม pytest suite สำหรับ planner, input/output contract, queue, cancel และ health responsiveness
+
+สถานะนี้ยังเป็น **source-level remediation ที่ยังต้องผ่าน real-media integration, PostgreSQL integration, canary worker และ production rollout** ไม่ควรถือว่า production ถูกแก้แล้วจนกว่าจะ deploy release เดียวกันครบทุก node
+
+Validation หลัง remediation รอบนี้:
+
+- Pytest target: 22 passed
+- Python compile: Gateway, Worker และ tests ผ่าน
+- Installer syntax: `bash -n deploy/install.sh` ผ่าน
+- Worker live smoke: `/health`, `/v1/capabilities`, `/openapi.json` ผ่านบน port ชั่วคราว
+- Gateway live ASGI smoke: TC04 dry-run คำนวณ 63 final outputs และ 84 stage outputs จาก duration 21 วินาที / segment 10 วินาที
+- ยังไม่ได้รัน real-media render หรือเปลี่ยน production worker
+
 ---
 
 ## 2. ขอบเขตและวิธีอ่านเอกสาร
