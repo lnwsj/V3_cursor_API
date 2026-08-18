@@ -27,3 +27,11 @@ def test_gateway_upload_lookup_supports_extension(tmp_path, monkeypatch):
     path = tmp_path / "product_1.mp4"
     path.write_bytes(b"data")
     assert gateway._find_upload_path("product_1") == path
+
+
+def test_gateway_form_values_are_coerced_and_file_ids_are_strict():
+    assert gateway._coerce_form_value("true") is True
+    assert gateway._coerce_form_value("42") == 42
+    assert gateway._coerce_form_value('["center"]') == ["center"]
+    with pytest.raises(Exception):
+        gateway._find_upload_path("*")

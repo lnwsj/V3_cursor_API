@@ -66,7 +66,7 @@
 
 Validation หลัง remediation รอบนี้:
 
-- Pytest target: 22 passed
+- Pytest target: 23 passed
 - Python compile: Gateway, Worker และ tests ผ่าน
 - Installer syntax: `bash -n deploy/install.sh` ผ่าน
 - Worker live smoke: `/health`, `/v1/capabilities`, `/openapi.json` ผ่านบน port ชั่วคราว

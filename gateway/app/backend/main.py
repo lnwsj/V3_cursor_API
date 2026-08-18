@@ -81,6 +81,8 @@ WORKER_TIMEOUT = 60.0  # sec
 MAX_LIST_LIMIT = 100
 MAX_UPLOAD_BYTES = max(1, int(os.getenv("GATEWAY_MAX_UPLOAD_BYTES", str(200 * 1024 * 1024))))
 SAFE_OUTPUT_NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,254}$")
+SAFE_FILE_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,160}$")
+TERMINAL_JOB_STATUSES = {"succeeded", "partial", "failed", "cancelled", "paused", "invalid_input"}
 BEARER_SCHEME = HTTPBearer(auto_error=False)
 
 logging.basicConfig(
@@ -116,7 +118,7 @@ def _pg_release(conn):
 
 def _find_upload_path(file_id: str) -> Path:
     """Resolve an upload id regardless of its stored media extension."""
-    if not file_id or Path(file_id).name != file_id:
+    if not file_id or Path(file_id).name != file_id or not SAFE_FILE_ID.fullmatch(file_id):
         raise HTTPException(status_code=400, detail="invalid file id")
     exact = UPLOADS_DIR / file_id
     if exact.is_file():
@@ -143,14 +145,6 @@ def _coerce_form_value(value: Any) -> Any:
     """Convert common multipart scalar values to the types pipelines expect."""
     if not isinstance(value, str):
         return value
-
-
-def _validate_upload_body(body: bytes) -> bytes:
-    if not body:
-        raise HTTPException(status_code=400, detail="empty upload")
-    if len(body) > MAX_UPLOAD_BYTES:
-        raise HTTPException(status_code=413, detail="upload too large")
-    return body
     text = value.strip()
     lowered = text.lower()
     if lowered == "true":
@@ -168,6 +162,14 @@ def _validate_upload_body(body: bytes) -> bytes:
         return float(text) if "." in text else int(text)
     except ValueError:
         return value
+
+
+def _validate_upload_body(body: bytes) -> bytes:
+    if not body:
+        raise HTTPException(status_code=400, detail="empty upload")
+    if len(body) > MAX_UPLOAD_BYTES:
+        raise HTTPException(status_code=413, detail="upload too large")
+    return body
 
 
 def _init_schema():
@@ -237,6 +239,7 @@ def _init_workers():
 async def lifespan(_: FastAPI):
     _init_schema()
     _init_workers()
+    await _reconcile_active_jobs()
     yield
 
 
@@ -448,7 +451,8 @@ def _mark_job_failed(job_id: str, message: str) -> None:
     try:
         with conn.cursor() as cur:
             cur.execute(
-                "UPDATE v3_jobs SET status='failed', error=%s, finished_at=%s WHERE job_id=%s",
+                "UPDATE v3_jobs SET status='failed', error=%s, finished_at=%s "
+                "WHERE job_id=%s AND status NOT IN ('succeeded','partial','failed','cancelled','paused','invalid_input')",
                 (str(message), time.time(), job_id),
             )
         conn.commit()
@@ -474,6 +478,12 @@ def _record_worker_status(job_id: str, data: Dict[str, Any]) -> str:
     conn = _pg_conn()
     try:
         with conn.cursor() as cur:
+            cur.execute("SELECT status FROM v3_jobs WHERE job_id=%s FOR UPDATE", (job_id,))
+            current_row = cur.fetchone()
+            current_status = _canonical_status(current_row["status"]) if current_row and current_row.get("status") else None
+            if current_status in TERMINAL_JOB_STATUSES and current_status != status:
+                conn.commit()
+                return current_status
             cur.execute(
                 """UPDATE v3_jobs
                    SET status=%s, progress=%s, current_step=%s,
@@ -493,7 +503,7 @@ def _record_worker_status(job_id: str, data: Dict[str, Any]) -> str:
                     json.dumps(result),
                     data.get("error"),
                     data.get("started_at"),
-                    data.get("finished_at") if status in {"succeeded", "partial", "failed", "cancelled", "paused", "invalid_input"} else None,
+                    data.get("finished_at") if status in TERMINAL_JOB_STATUSES else None,
                     job_id,
                 ),
             )
@@ -501,6 +511,10 @@ def _record_worker_status(job_id: str, data: Dict[str, Any]) -> str:
     finally:
         _pg_release(conn)
     return status
+
+
+async def _record_worker_status_async(job_id: str, data: Dict[str, Any]) -> str:
+    return await asyncio.to_thread(_record_worker_status, job_id, data)
 
 
 async def _monitor_worker_job(job_id: str, worker: Dict[str, Any]) -> None:
@@ -516,18 +530,18 @@ async def _monitor_worker_job(job_id: str, worker: Dict[str, Any]) -> None:
                         headers={"X-Cutdee-Internal": INTERNAL_TOKEN},
                     )
                     if response.status_code == 404:
-                        _mark_job_failed(job_id, "worker lost job state")
+                        await asyncio.to_thread(_mark_job_failed, job_id, "worker lost job state")
                         return
                     response.raise_for_status()
                     data = response.json()
-                    status = _record_worker_status(job_id, data)
-                    if status in {"succeeded", "partial", "failed", "cancelled", "paused", "invalid_input"}:
+                    status = await _record_worker_status_async(job_id, data)
+                    if status in TERMINAL_JOB_STATUSES:
                         return
                     interval = min(3.0, interval * 1.25)
                 except Exception as exc:
                     log.warning("job=%s status poll failed: %s", job_id, exc)
                 await asyncio.sleep(interval)
-        _mark_job_failed(job_id, "worker job monitor timeout")
+        await asyncio.to_thread(_mark_job_failed, job_id, "worker job monitor timeout")
     finally:
         _MONITOR_TASKS.pop(job_id, None)
 
@@ -539,6 +553,31 @@ def _start_worker_monitor(job_id: str, worker: Dict[str, Any], status: str) -> N
     if existing and not existing.done():
         return
     _MONITOR_TASKS[job_id] = asyncio.create_task(_monitor_worker_job(job_id, worker))
+
+
+def _load_active_job_rows() -> List[Dict[str, Any]]:
+    conn = _pg_conn()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT * FROM v3_jobs WHERE status IN ('queued','running','cancelling')"
+            )
+            return list(cur.fetchall())
+    finally:
+        _pg_release(conn)
+
+
+async def _reconcile_active_jobs() -> None:
+    """Recreate monitors for jobs that survived a Gateway restart."""
+    try:
+        rows = await asyncio.to_thread(_load_active_job_rows)
+    except Exception as exc:
+        log.warning("active job reconciliation skipped: %s", exc)
+        return
+    for row in rows:
+        worker = _worker_for_job(row)
+        if worker:
+            _start_worker_monitor(row["job_id"], worker, row.get("status", "queued"))
 
 
 async def _refresh_job_from_worker(row: Dict[str, Any]) -> Dict[str, Any]:
@@ -556,7 +595,7 @@ async def _refresh_job_from_worker(row: Dict[str, Any]) -> Dict[str, Any]:
             )
             if response.status_code == 200:
                 data = response.json()
-                _record_worker_status(row["job_id"], data)
+                await _record_worker_status_async(row["job_id"], data)
                 row.update(data)
                 row["status"] = _canonical_status(data.get("status"))
     except Exception as exc:
@@ -1063,7 +1102,7 @@ async def create_job(
             _pg_release(conn)
         _start_worker_monitor(job_id, worker, status)
     else:
-        _record_worker_status(job_id, result)
+        await _record_worker_status_async(job_id, result)
 
     log.info(f"job={job_id} worker={worker['id']} status={result.get('status')}")
     return {
@@ -1332,7 +1371,7 @@ async def api_jobs_cancel(job_id: str, user: str = Depends(_verify_user)):
     if not row:
         raise HTTPException(404, "job not found")
     result = await _worker_control(row, "cancel")
-    _record_worker_status(job_id, result)
+    await _record_worker_status_async(job_id, result)
     return {"job_id": job_id, "status": _canonical_status(result.get("status")), "cancel_requested": True}
 
 @app.post("/api/jobs/{job_id}/pause")
@@ -1350,7 +1389,7 @@ async def api_jobs_pause(job_id: str, user: str = Depends(_verify_user)):
     if not row:
         raise HTTPException(404, "job not found")
     result = await _worker_control(row, "pause")
-    _record_worker_status(job_id, result)
+    await _record_worker_status_async(job_id, result)
     return {"job_id": job_id, "status": _canonical_status(result.get("status")), "pause_requested": True}
 
 @app.post("/api/jobs/{job_id}/resume")
@@ -1368,7 +1407,7 @@ async def api_jobs_resume(job_id: str, user: str = Depends(_verify_user)):
     if not row:
         raise HTTPException(404, "job not found")
     result = await _worker_control(row, "resume")
-    _record_worker_status(job_id, result)
+    await _record_worker_status_async(job_id, result)
     worker = _worker_for_job(row)
     if worker:
         _start_worker_monitor(job_id, worker, result.get("status", "queued"))
@@ -1650,7 +1689,7 @@ async def _dispatch_tc_render(tc: str, payload: V3RenderPayload, user: str = "an
     if status in {"queued", "running"}:
         _start_worker_monitor(job_id, worker, status)
     else:
-        _record_worker_status(job_id, result)
+        await _record_worker_status_async(job_id, result)
     output_files = list(result.get("output_files", []) or [])
     if result.get("output_file") and result["output_file"] not in output_files:
         output_files.insert(0, result["output_file"])

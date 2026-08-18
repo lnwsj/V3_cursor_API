@@ -321,10 +321,13 @@ def _submit_job(job_id: str, tc_label: str, factory: RunnerFactory) -> Dict[str,
         _JOBS[job_id] = state
         _CONTROLS[job_id] = control
         _FACTORIES[job_id] = factory
+        snapshot = dict(state)
+        # Persist the queued snapshot before submitting.  A fast executor
+        # task must never be able to write terminal state before this initial
+        # snapshot and then have it overwritten by stale queued data.
+        _persist_state(job_id, snapshot)
         future = _EXECUTOR.submit(_execute_job, job_id, tc_label, control, factory)
         _FUTURES[job_id] = future
-        snapshot = dict(state)
-    _persist_state(job_id, snapshot)
     return snapshot
 
 
@@ -369,8 +372,12 @@ def _execute_job(job_id: str, tc_label: str, control: _JobControl, factory: Runn
     finally:
         with _JOBS_LOCK:
             _FUTURES.pop(job_id, None)
-            if _JOBS.get(job_id, {}).get("status") in TERMINAL_STATUSES:
+            terminal = _JOBS.get(job_id, {}).get("status") in TERMINAL_STATUSES
+            if terminal:
                 _CONTROLS.pop(job_id, None)
+                if _JOBS.get(job_id, {}).get("status") != "paused":
+                    _FACTORIES.pop(job_id, None)
+                _JOBS.pop(job_id, None)
 
 
 def _control_job(job_id: str, action: str) -> Dict[str, Any]:
@@ -621,7 +628,9 @@ def _build_tc_inputs(job_id: str, req: TCRenderRequest) -> PipelineInputs:
     if isinstance(extra_roots, str):
         extra_roots = [extra_roots]
     root_values.extend(str(value) for value in (extra_roots or []))
-    values = dict(req.values if req.values is not None else (req.settings or {}))
+    values = {**(req.settings or {}), **(req.values or {})}
+    if req.run_seed is not None:
+        values["run_seed"] = req.run_seed
     return PipelineInputs(
         output_dir=str(_job_dir(job_id)),
         values=values,
@@ -662,6 +671,10 @@ def _collect_outputs(job_id: str, result: Any, input_paths: set[str]) -> List[st
     # PipelineResult.outputs. Uploaded files are tracked and excluded by path,
     # not by filename prefix, so TC01 product_* outputs remain discoverable.
     if not names:
+        raw_status = getattr(result, "status", None)
+        raw_status = getattr(raw_status, "value", raw_status)
+        if raw_status is not None and _canonical_status(raw_status) not in {"succeeded", "partial"}:
+            return []
         for path in sorted(jd.rglob("*.mp4")):
             if path.name.startswith(".") or ".partial." in path.name:
                 continue
@@ -830,6 +843,10 @@ def _pipeline_factory(tc_label: str, render_fn: Callable[..., Any], job_id: str,
             for path in [*inputs.products, *inputs.backgrounds, *inputs.audios, *inputs.covers, *inputs.sources]
             if Path(path).exists()
         }
+        for root in inputs.product_roots:
+            root_path = Path(root)
+            if root_path.is_dir():
+                input_paths.update(str(path.resolve()) for path in root_path.rglob("*") if path.is_file())
         callbacks = _callbacks(job_id, control)
         _update_job(job_id, tc=tc_label, current_step="running")
         result = render_fn(inputs, callbacks)

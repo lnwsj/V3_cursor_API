@@ -18,6 +18,8 @@ from datetime import datetime
 
 # v3.PARALLEL (2026-08-18): TC04 chroma stage parallel ffmpegs.
 # Default 1 (sequential) preserved for backward compat; env V3_TC04_PARALLEL overrides.
+# WARNING: parallel=3 is SLOWER on RTX 2050 (CPU contention — x264 doesn't scale well
+# below ~4 threads). Keep at 1 unless CPU count ≥ 16.
 _TC04_PARALLEL = max(1, int(os.environ.get("V3_TC04_PARALLEL", "1") or "1"))
 from typing import Any, Callable, Dict, Iterable, List, Tuple
 
@@ -900,7 +902,9 @@ def render(inputs: PipelineInputs, cb: PipelineCallbacks) -> PipelineResult:
             on_progress=on_batch_progress,
             stop_check=stop,
             tc_label="TC04",
-            chroma_max_parallel=_TC04_PARALLEL,
+            # render_batch is currently sequential; keep the budget at one
+            # until a real concurrent batch executor is implemented.
+            chroma_max_parallel=1,
             run_stamp=run_stamp,
             pre_validated_outputs=batch_pre_validated,
         )

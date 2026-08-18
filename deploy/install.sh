@@ -14,8 +14,19 @@ SERVICE_USER="v3api"
 INTERNAL_TOKEN="${CUTDEE_INTERNAL_TOKEN:-}"
 API_VERSION="${CUTDEE_API_VERSION:-1.2.0}"
 if [[ -z "$INTERNAL_TOKEN" ]]; then
+    for existing_env in /etc/v3-cursor-api/gateway.env /etc/v3-cursor-api/worker.env; do
+        if [[ -f "$existing_env" ]]; then
+            existing_token="$(grep '^CUTDEE_INTERNAL_TOKEN=' "$existing_env" | cut -d= -f2- || true)"
+            if [[ -n "$existing_token" ]]; then
+                INTERNAL_TOKEN="$existing_token"
+                break
+            fi
+        fi
+    done
+fi
+if [[ -z "$INTERNAL_TOKEN" ]]; then
     INTERNAL_TOKEN="$(python3 -c 'import secrets; print(secrets.token_urlsafe(32))')"
-    echo "Generated an internal gateway-worker token for this installation."
+    echo "Generated and persisted an internal gateway-worker token for this installation."
 fi
 
 echo "==================================="

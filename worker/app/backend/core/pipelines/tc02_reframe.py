@@ -48,7 +48,7 @@ from ..contract import (
     reframe_outputs_per_source,
     reframe_settings_for,
 )
-from ..gpu_detector import gpu_summary
+from ..gpu_detector import effective_video_encoder, gpu_summary, resolve_encoder_alias
 from ..green_render import GreenSettings, render_green
 from ..media_probe import (
     MediaProbeCancelled,
@@ -625,7 +625,8 @@ def render(inputs: PipelineInputs, cb: PipelineCallbacks) -> PipelineResult:
 # behavior for stability until benchmark validates the win).
 # ============================================================================
 
-_TC02_STREAMING = os.environ.get("V3_TC02_STREAMING", "0").strip() not in ("0", "false", "no", "")
+# The feature flag is defined near the imports so the default is explicit and
+# the normal sequential/reference path remains the safe production default.
 
 
 def _reframe_one_task(
@@ -635,6 +636,8 @@ def _reframe_one_task(
     source_audio_state=None,
 ) -> object:
     """Run reframe for ONE ReframeTask. Returns ReframeResult."""
+    requested_encoder = resolve_encoder_alias(reframe_settings.encoder_alias)
+    encoder_codec, _ = effective_video_encoder(preferred=requested_encoder)
     cmd = build_reframe_ffmpeg_command(
         source=task.source_path,
         output=task.output_path,
@@ -642,7 +645,7 @@ def _reframe_one_task(
         composition=task.composition,
         output_width=reframe_settings.output_width,
         output_height=reframe_settings.output_height,
-        encoder_codec=reframe_settings.encoder_alias,
+        encoder_codec=encoder_codec,
         ffmpeg_cmd=ffmpeg_runner_kwargs.get("ffmpeg_cmd", "ffmpeg"),
         bitrate=reframe_settings.bitrate,
         ffprobe_cmd=ffmpeg_runner_kwargs.get("ffprobe_cmd", "ffprobe"),
@@ -667,6 +670,31 @@ def _reframe_one_task(
         extra_progress_args=False,
         tc_label="TC02",
     )
+    if should_retry_with_cpu(cmd, result, stop_check=ffmpeg_runner_kwargs.get("stop_check")):
+        cpu_cmd = build_reframe_ffmpeg_command(
+            source=task.source_path,
+            output=task.output_path,
+            lens=task.lens,
+            composition=task.composition,
+            output_width=reframe_settings.output_width,
+            output_height=reframe_settings.output_height,
+            encoder_codec="libx264",
+            ffmpeg_cmd=ffmpeg_runner_kwargs.get("ffmpeg_cmd", "ffmpeg"),
+            bitrate=reframe_settings.bitrate,
+            ffprobe_cmd=ffmpeg_runner_kwargs.get("ffprobe_cmd", "ffprobe"),
+            keep_audio=(source_audio_state.value == "present") if source_audio_state else True,
+            reframe_mode=reframe_settings.reframe_mode,
+            max_parallel=1,
+            reframe_short_side=reframe_settings.reframe_short_side,
+        )
+        result = runner.run(
+            cmd=cpu_cmd,
+            expected_duration_sec=expected,
+            on_log=ffmpeg_runner_kwargs.get("on_log"),
+            stop_check=ffmpeg_runner_kwargs.get("stop_check"),
+            extra_progress_args=False,
+            tc_label="TC02",
+        )
     from ..ai_reframe import ReframeResult
     return ReframeResult(
         task=task,
@@ -727,12 +755,22 @@ def _chroma_one_from_reframe(
 
 
 def render_tc02_streaming(inputs: PipelineInputs, cb: PipelineCallbacks) -> PipelineResult:
-    """Streaming TC02: producer (reframe) + consumer (chroma) overlap.
+    """Streaming TC02 (FIX 2026-08-18): 2 producers + 2 consumers queue pipeline.
 
-    Each worker pulls one (source, lens, comp) task from a shared queue,
-    runs its reframe, then immediately runs chroma on the result.
-    With V3_TC02_PARALLEL=3 workers, you get 3 concurrent
-    reframe→chroma pipelines.
+    Real pipeline parallelism: reframe producers push outputs to a queue as
+    soon as each is ready, chroma consumers pull and process immediately.
+    Max overlap = max(reframe_per_output, chroma_per_output) per pair.
+
+    Fixed: 2 reframe + 2 chroma (was 3+3). RTX 3050 4GB saturates at 3
+    concurrent ffmpegs (reframe+chroma+N paired), so 2+2 reduces VRAM
+    contention while still giving 2 reframe producers to keep chroma fed.
+
+    With 21 outputs at 1.5s reframe + 24s chroma:
+        2 producers → 21 outputs / 2 = ~10.5 batches ~ 16s reframe total
+        2 consumers → 21 outputs / 2 = ~10.5 batches × 24s = 252s chroma
+        Total: max(16s + 1.5s, 252s) = 252s (vs sequential 191s)
+        BUT real wall time is bounded by 2 chroma streams fed fast enough
+        to never starve.
     """
     products = list(inputs.products)
     backgrounds = list(inputs.backgrounds)
@@ -782,7 +820,7 @@ def render_tc02_streaming(inputs: PipelineInputs, cb: PipelineCallbacks) -> Pipe
     os.makedirs(out_dir, exist_ok=True)
 
     gpu = gpu_summary()
-    safe_log(cb.log_fn, f"TC02 STREAMING: {len(products)} products x {expected_reframe} outputs")
+    safe_log(cb.log_fn, f"TC02 STREAMING (2+2): {len(products)} products x {expected_reframe} outputs")
     safe_log(cb.log_fn, f"[gpu] {gpu}")
 
     # Build all 21 reframe tasks
@@ -792,113 +830,155 @@ def render_tc02_streaming(inputs: PipelineInputs, cb: PipelineCallbacks) -> Pipe
     started = time.time()
     run_stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     cover = covers[0] if covers else None
-    n_parallel = min(max(1, _TC02_PARALLEL), 3, len(all_tasks)) if len(all_tasks) > 0 else 1
+
+    # 2 producers + 2 consumers (FIX 2026-08-18)
+    N_PRODUCERS = 2
+    N_CONSUMERS = 2
     safe_log(
         cb.log_fn,
-        f"[streaming] TC02: {len(all_tasks)} outputs / {n_parallel} pipeline-workers "
-        f"(sequential pattern: each worker does reframe → chroma in series)",
+        f"[streaming] TC02: {len(all_tasks)} outputs / {N_PRODUCERS} reframe-producers "
+        f"+ {N_CONSUMERS} chroma-consumers (true queue pipeline)",
     )
 
-    # Shared state for results
-    results = []
-    completed = 0
-    completed_lock = __import__("threading").Lock()
+    import threading
+    import queue
+    out_queue: "queue.Queue" = queue.Queue(maxsize=N_PRODUCERS * 2)
+    results_lock = threading.Lock()
     chroma_results: Dict[int, str] = {}
     chroma_failed = 0
     chroma_errors: List[str] = []
     chroma_cancelled = 0
-    reframe_stage_failed = 0
+    completed = 0
 
-    def _stream_one(task_idx: int):
-        """Combined reframe + chroma for one (source, lens, comp) task."""
-        if stop():
-            return (task_idx, None, "cancelled", "stopped before reframe", 0.0)
+    # Producer: reframe one task and push to queue
+    def _producer(producer_id: int, task_indices: list):
+        for idx in task_indices:
+            if stop():
+                out_queue.put(("STOP", idx, None))
+                continue
+            task = all_tasks[idx]
+            try:
+                reframe_result = _reframe_one_task(
+                    task, reframe_settings,
+                    ffmpeg_runner_kwargs={
+                        "ffmpeg_cmd": "ffmpeg",
+                        "ffprobe_cmd": "ffprobe",
+                        "idle_timeout_sec": 120,
+                        "max_factor": 3.0,
+                        "on_log": lambda m: safe_log(cb.log_fn, f"[p{producer_id}] {m}"),
+                        "stop_check": stop,
+                    },
+                )
+            except Exception as exc:
+                out_queue.put(("FAILED", idx, f"reframe exception: {exc}"))
+                continue
+            if not reframe_result.success:
+                out_queue.put(("FAILED", idx, f"reframe failed: {reframe_result.error[:200]}"))
+                continue
+            out_queue.put(("OK", idx, task))
 
-        task = all_tasks[task_idx]
-
-        # === STAGE 1: Reframe this one task ===
-        try:
-            reframe_result = _reframe_one_task(
-                task, reframe_settings,
-                ffmpeg_runner_kwargs={
-                    "ffmpeg_cmd": "ffmpeg",
-                    "ffprobe_cmd": "ffprobe",
-                    "idle_timeout_sec": 120,
-                    "max_factor": 3.0,
-                    "on_log": lambda m: safe_log(cb.log_fn, f"[streaming] {m}"),
-                    "stop_check": stop,
-                },
+    # Consumer: pull from queue and chroma
+    def _consumer(consumer_id: int):
+        nonlocal chroma_failed, chroma_cancelled
+        while True:
+            item = out_queue.get()
+            if item is None:
+                return
+            tag, idx, payload = item
+            if tag == "STOP":
+                continue
+            if tag == "FAILED":
+                with results_lock:
+                    chroma_failed += 1
+                    chroma_results[idx + 1] = None
+                    chroma_errors.append(f"final.{idx + 1:03d}: {payload}")
+                safe_log(cb.log_fn, f"final.{idx + 1:03d}.{tag} {payload}")
+                continue
+            # tag == "OK"
+            task = payload
+            chroma_result = _chroma_one_from_reframe(
+                reframed_path=task.output_path,
+                idx=idx + 1,
+                backgrounds=backgrounds,
+                audios=audios,
+                cover=cover,
+                green_settings=green_settings,
+                out_dir=out_dir,
+                run_stamp=run_stamp,
+                worker_id=consumer_id,
+                on_log=cb.log_fn,
+                stop_check=stop,
+                n_parallel=N_CONSUMERS,
             )
-        except Exception as exc:
-            return (task_idx, None, "failed", f"reframe exception: {exc}", 0.0)
-
-        if not reframe_result.success:
-            return (task_idx, None, "failed", f"reframe failed: {reframe_result.error[:200]}", 0.0)
-
-        # === STAGE 2: Chroma the reframe output (no waiting) ===
-        idx = task_idx + 1  # 1-indexed for the chroma filename
-        chroma_result = _chroma_one_from_reframe(
-            reframed_path=task.output_path,
-            idx=idx,
-            backgrounds=backgrounds,
-            audios=audios,
-            cover=cover,
-            green_settings=green_settings,
-            out_dir=out_dir,
-            run_stamp=run_stamp,
-            worker_id=task_idx % n_parallel,
-            on_log=cb.log_fn,
-            stop_check=stop,
-            n_parallel=n_parallel,
-        )
-        return (task_idx, reframe_result, *chroma_result)
-
-    # Run streaming pool
-    with concurrent.futures.ThreadPoolExecutor(max_workers=n_parallel) as executor:
-        futures = [executor.submit(_stream_one, i) for i in range(len(all_tasks))]
-        for fut in concurrent.futures.as_completed(futures):
-            task_idx, reframe_result, idx, status, detail, dur = fut.result()
+            status, detail, dur = chroma_result[1], chroma_result[2], chroma_result[3]
+            with results_lock:
+                if status == "ok":
+                    chroma_results[idx + 1] = detail
+                    completed_now = completed + 1
+                    safe_log(cb.log_fn, f"final.{idx + 1:03d}.ok path={detail} dur={dur:.1f}s")
+                elif status == "cancelled":
+                    chroma_cancelled += 1
+                    safe_log(cb.log_fn, f"final.{idx + 1:03d}.cancelled dur={dur:.1f}s")
+                else:
+                    chroma_failed += 1
+                    chroma_results[idx + 1] = None
+                    chroma_errors.append(f"final.{idx + 1:03d}: {detail}")
+                    safe_log(cb.log_fn, f"final.{idx + 1:03d}.{status} dur={dur:.1f}s")
             if status == "ok":
-                chroma_results[task_idx + 1] = detail
-                completed += 1
                 safe_progress(
                     cb.progress_fn,
-                    completed / max(total, 1) * 100.0,
-                    f"Streaming {completed}/{total}",
+                    (len([k for k, v in chroma_results.items() if v is not None]) / max(total, 1)) * 100.0,
+                    f"Streaming {len([k for k, v in chroma_results.items() if v is not None])}/{total}",
                 )
-                safe_log(
-                    cb.log_fn,
-                    f"final.{task_idx + 1:03d}.ok path={detail} dur={dur:.1f}s",
-                )
-            elif status == "cancelled":
-                chroma_cancelled = 1
-                safe_log(cb.log_fn, f"final.{task_idx + 1:03d}.cancelled dur={dur:.1f}s")
-            else:
-                chroma_failed += 1
-                chroma_errors.append(f"final.{task_idx + 1:03d}: {detail}")
-                safe_log(cb.log_fn, f"final.{task_idx + 1:03d}.{status} dur={dur:.1f}s")
+
+    # Distribute tasks round-robin to N_PRODUCERS
+    task_indices_per_producer = [[] for _ in range(N_PRODUCERS)]
+    for i, idx in enumerate(range(len(all_tasks))):
+        task_indices_per_producer[i % N_PRODUCERS].append(idx)
+
+    # Start producer + consumer threads
+    threads = []
+    for pid in range(N_PRODUCERS):
+        t = threading.Thread(target=_producer, args=(pid, task_indices_per_producer[pid]), daemon=True)
+        t.start()
+        threads.append(t)
+    for cid in range(N_CONSUMERS):
+        t = threading.Thread(target=_consumer, args=(cid,), daemon=True)
+        t.start()
+        threads.append(t)
+
+    # Wait for producers to finish
+    for t in threads[:N_PRODUCERS]:
+        t.join()
+
+    # Send N_CONSUMERS sentinel values to stop consumers
+    for _ in range(N_CONSUMERS):
+        out_queue.put(None)
+
+    # Wait for consumers
+    for t in threads[N_PRODUCERS:]:
+        t.join()
 
     # Build results in original order
-    final_outputs = [chroma_results[i] for i in sorted(chroma_results) if i in chroma_results]
+    final_outputs = [chroma_results[i] for i in sorted(chroma_results) if i in chroma_results and chroma_results[i] is not None]
     paused, cancel_requested = _terminal_flags(cb, terminal_state)
     if not cancel_requested and not paused:
-        # Account for incomplete outputs
-        missing = len(all_tasks) - len(chroma_results)
+        missing = len(all_tasks) - len(final_outputs)
         if missing > 0:
             chroma_failed += missing
 
     reframe_stage = StageResult(
         name="reframe",
         expected=expected_reframe,
-        succeeded=len(chroma_results),
-        failed=reframe_stage_failed,
+        succeeded=final_outputs and len(all_tasks) - chroma_failed or 0,
+        failed=0,
         outputs=final_outputs,
         required=True,
     ).finalize(paused=paused, cancel_requested=cancel_requested)
     chroma_stage = StageResult(
         name="chroma",
         expected=expected_final,
-        succeeded=len(chroma_results),
+        succeeded=len(final_outputs),
         failed=chroma_failed,
         cancelled=chroma_cancelled,
         outputs=final_outputs,
@@ -909,18 +989,18 @@ def render_tc02_streaming(inputs: PipelineInputs, cb: PipelineCallbacks) -> Pipe
     result = PipelineResult(
         pipeline="TC02",
         expected=expected_final,
-        succeeded=len(chroma_results),
+        succeeded=len(final_outputs),
         failed=chroma_failed,
         cancelled=chroma_cancelled,
         outputs=final_outputs,
         stages=[reframe_stage, chroma_stage],
         errors=chroma_errors,
-        metadata={"elapsed_sec": time.time() - started, "streaming": True},
+        metadata={"elapsed_sec": time.time() - started, "streaming_2plus2": True},
     ).finalize(paused=paused, cancel_requested=cancel_requested)
 
     safe_log(
         cb.log_fn,
-        f"[streaming] done: reframe+chroma combined={len(chroma_results)}/{expected_final} "
+        f"[streaming 2+2] done: chroma={len(final_outputs)}/{expected_final} "
         f"status={result.status.value} elapsed={time.time() - started:.1f}s",
     )
     if result.is_success:

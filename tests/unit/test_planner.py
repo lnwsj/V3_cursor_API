@@ -42,4 +42,5 @@ def test_tc05_uses_sources_not_products():
 def test_tc06_prefers_product_roots():
     plan = plan_tc("tc06", {"product_root": ["r1", "r2"]}, {})
     assert plan["final_count"] == 2
-    assert composition_count({"compositions": ["center", "left"]}) == 2
+    assert composition_count({"use_center": True, "use_left": True, "use_right": False}) == 2
+    assert composition_count({"use_center": False, "use_left": False, "use_right": False}) == 0

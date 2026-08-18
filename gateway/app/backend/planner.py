@@ -37,15 +37,12 @@ def _as_positive_float(value: Any, default: float) -> float:
 
 def composition_count(values: Mapping[str, Any] | None) -> int:
     values = values or {}
-    explicit = values.get("compositions")
-    if isinstance(explicit, Sequence) and not isinstance(explicit, (str, bytes)):
-        return max(1, len([item for item in explicit if str(item).strip()]))
     toggles = [
         _as_bool(values.get("use_center"), True),
         _as_bool(values.get("use_left"), True),
         _as_bool(values.get("use_right"), True),
     ]
-    return max(1, sum(toggles))
+    return sum(toggles)
 
 
 def _count(files: Mapping[str, Any] | None, *keys: str) -> int:
@@ -90,7 +87,11 @@ def plan_tc(tc: str, files: Mapping[str, Any] | None, values: Mapping[str, Any] 
         final_count = sources * reframe_per_source
         stage_count = final_count
     else:
-        final_count = roots or products
+        # TC06 discovers final outputs from audio files inside each root.  An
+        # archive's contents are unknown to a pure dry-run, so an explicit
+        # audio list is exact and a root count is only a lower-confidence
+        # fallback for UI previews.
+        final_count = _count(files, "audio", "audios") or roots
         stage_count = final_count
 
     return {
