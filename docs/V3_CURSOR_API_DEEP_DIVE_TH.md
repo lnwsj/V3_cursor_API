@@ -62,7 +62,7 @@
 - sync parity บางส่วน: reframe cap 3, full-resolution default, null composition fallback, portable path และ TC01 mapping progress
 - เพิ่ม pytest suite สำหรับ planner, input/output contract, queue, cancel และ health responsiveness
 
-สถานะนี้ยังเป็น **source-level remediation ที่ยังต้องผ่าน real-media integration, PostgreSQL integration, canary worker และ production rollout** ไม่ควรถือว่า production ถูกแก้แล้วจนกว่าจะ deploy release เดียวกันครบทุก node
+สถานะนี้เป็น **source-level remediation ที่ deploy แล้วบน production Gateway, local Worker และ Mac M4** ที่ release `f6299fa` แต่ยังต้องทำ real-media acceptance ให้ครบทุก TC และจัดการ worker nodes ที่ยังอยู่นอก release ก่อนถือว่า cluster parity สมบูรณ์
 
 Validation หลัง remediation รอบนี้:
 
@@ -71,7 +71,8 @@ Validation หลัง remediation รอบนี้:
 - Installer syntax: `bash -n deploy/install.sh` ผ่าน
 - Worker live smoke: `/health`, `/v1/capabilities`, `/openapi.json` ผ่านบน port ชั่วคราว
 - Gateway live ASGI smoke: TC04 dry-run คำนวณ 63 final outputs และ 84 stage outputs จาก duration 21 วินาที / segment 10 วินาที
-- ยังไม่ได้รัน real-media render หรือเปลี่ยน production worker
+- Real-media benchmark ของ Mac M4 บันทึกไว้ที่ [`docs/V3_MAC_M4_SPEED_BENCHMARK_TH.md`](V3_MAC_M4_SPEED_BENCHMARK_TH.md)
+- Production smoke ผ่าน `/v3api/healthz`, `/v3api/api/version` และ `/v3api/api/cluster/health`
 
 ---
 
