@@ -412,9 +412,16 @@ def _run_tc_pipeline(tc_label: str, render_fn, job_id: str, req: TCRenderRequest
 
     elapsed = time.time() - t0
     output_files = []
+    upload_prefixes = ("background_", "product_", "source_", "cover_", "audio_")
     for f in jd.iterdir():
-        if f.suffix == ".mp4" and not f.name.endswith(".partial.*"):
-            output_files.append(f.name)
+        if f.suffix != ".mp4":
+            continue
+        if f.name.endswith(".partial.*"):
+            continue
+        # Skip raw upload files (no __lens*__tc*__ marker)
+        if f.name.startswith(upload_prefixes) and "__lens" not in f.name:
+            continue
+        output_files.append(f.name)
     output_files.sort()
 
     status = result.status.value if hasattr(result.status, "value") else str(result.status)
