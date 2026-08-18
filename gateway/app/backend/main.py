@@ -200,6 +200,19 @@ def _init_schema():
         started_at DOUBLE PRECISION,
         finished_at DOUBLE PRECISION
     );
+    CREATE TABLE IF NOT EXISTS v3_users (
+        user_id TEXT PRIMARY KEY,
+        api_key_hash TEXT NOT NULL,
+        role TEXT NOT NULL DEFAULT 'user',
+        display_name TEXT,
+        monthly_quota INT NOT NULL DEFAULT 100,
+        monthly_used INT NOT NULL DEFAULT 0,
+        api_key_prefix TEXT,
+        created_at DOUBLE PRECISION NOT NULL,
+        last_seen_at DOUBLE PRECISION,
+        last_reset_at DOUBLE PRECISION
+    );
+    CREATE INDEX IF NOT EXISTS idx_v3_users_role ON v3_users(role);
     CREATE INDEX IF NOT EXISTS idx_v3_jobs_user ON v3_jobs(user_id, created_at DESC);
     CREATE INDEX IF NOT EXISTS idx_v3_jobs_status ON v3_jobs(status);
     """
@@ -207,10 +220,19 @@ def _init_schema():
         "ALTER TABLE v3_jobs ADD COLUMN IF NOT EXISTS tc TEXT DEFAULT 'tc01'",
         "ALTER TABLE v3_jobs ADD COLUMN IF NOT EXISTS progress INT DEFAULT 0",
         "ALTER TABLE v3_jobs ADD COLUMN IF NOT EXISTS current_step TEXT",
+        "ALTER TABLE v3_jobs ADD COLUMN IF NOT EXISTS priority INT DEFAULT 0",
+        "ALTER TABLE v3_jobs ADD COLUMN IF NOT EXISTS max_retries INT DEFAULT 0",
+        "ALTER TABLE v3_jobs ADD COLUMN IF NOT EXISTS retry_count INT DEFAULT 0",
+        "ALTER TABLE v3_jobs ADD COLUMN IF NOT EXISTS heartbeat_at DOUBLE PRECISION",
+        "ALTER TABLE v3_jobs ADD COLUMN IF NOT EXISTS cover_path TEXT",
+        "ALTER TABLE v3_jobs ADD COLUMN IF NOT EXISTS audio_path TEXT",
         "ALTER TABLE v3_jobs ADD COLUMN IF NOT EXISTS output_files JSONB",
         "ALTER TABLE v3_jobs ADD COLUMN IF NOT EXISTS log JSONB",
         "ALTER TABLE v3_jobs ADD COLUMN IF NOT EXISTS result JSONB",
         "CREATE INDEX IF NOT EXISTS idx_v3_jobs_tc ON v3_jobs(tc, created_at DESC)",
+        "CREATE INDEX IF NOT EXISTS idx_v3_jobs_priority_status ON v3_jobs(priority DESC, status, created_at)",
+        "CREATE INDEX IF NOT EXISTS idx_v3_jobs_user ON v3_jobs(user_id, created_at DESC)",
+        "CREATE INDEX IF NOT EXISTS idx_v3_jobs_status ON v3_jobs(status)",
     ]
     conn = _pg_conn()
     try:
@@ -263,13 +285,58 @@ def _bearer_token(authorization: Optional[str]) -> Optional[str]:
 
 
 def _user_for_token(token: Optional[str]) -> str:
+    """Resolve API key to a user_id, auto-registering on first use.
+
+    Returns synthetic u_<hash> for non-admin users (auto-registered).
+    Returns 'admin' for the admin API key.
+    """
     if not PUBLIC_API_KEYS:
         raise HTTPException(status_code=503, detail="API authentication is not configured")
     if not token or not any(hmac.compare_digest(token, key) for key in PUBLIC_API_KEYS):
         raise HTTPException(status_code=401, detail="invalid API token")
     if ADMIN_API_KEY and hmac.compare_digest(token, ADMIN_API_KEY):
+        # Auto-register admin user
+        try:
+            conn = _pg_conn()
+            try:
+                with conn.cursor() as cur:
+                    cur.execute(
+                        """
+                        INSERT INTO v3_users (user_id, api_key_hash, role, api_key_prefix, created_at, last_seen_at, last_reset_at, monthly_quota)
+                        VALUES ('admin', %s, 'admin', 'admin...', %s, %s, %s, 999999)
+                        ON CONFLICT (user_id) DO UPDATE SET last_seen_at = EXCLUDED.last_seen_at
+                        """,
+                        (hashlib.sha256(token.encode("utf-8")).hexdigest(), time.time(), time.time(), time.time()),
+                    )
+                conn.commit()
+            finally:
+                _pg_release(conn)
+        except Exception:
+            log.exception("admin user auto-register failed")
         return "admin"
-    return f"u_{hashlib.sha256(token.encode('utf-8')).hexdigest()[:12]}"
+    user_id = f"u_{hashlib.sha256(token.encode('utf-8')).hexdigest()[:12]}"
+    api_key_hash = hashlib.sha256(token.encode("utf-8")).hexdigest()
+    api_key_prefix = token[:11] + "..." if len(token) > 11 else token
+    # Auto-register user on first use (idempotent)
+    try:
+        conn = _pg_conn()
+        try:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    INSERT INTO v3_users (user_id, api_key_hash, role, api_key_prefix, created_at, last_seen_at, last_reset_at)
+                    VALUES (%s, %s, 'user', %s, %s, %s, %s)
+                    ON CONFLICT (user_id) DO UPDATE SET last_seen_at = EXCLUDED.last_seen_at
+                    """,
+                    (user_id, api_key_hash, api_key_prefix, time.time(), time.time(), time.time()),
+                )
+            conn.commit()
+        finally:
+            _pg_release(conn)
+    except Exception:
+        # DB error should not break auth — log and continue
+        log.exception("user auto-register failed for %s", user_id)
+    return user_id
 
 
 def _verify_user(
@@ -946,6 +1013,136 @@ async def update_worker(worker_id: str, update: WorkerUpdate, _: bool = Depends(
     if update.url is not None: found["url"] = update.url.rstrip("/")
     _save_workers(workers)
     return {"ok": True, "updated": found, "total": len(workers)}
+
+
+# =====================================================================
+# Members / Users / History endpoints (FIX 2026-08-18)
+# =====================================================================
+
+class UserOut(BaseModel):
+    user_id: str
+    role: str
+    display_name: Optional[str] = None
+    monthly_quota: int
+    monthly_used: int
+    api_key_prefix: Optional[str] = None
+    created_at: float
+    last_seen_at: Optional[float] = None
+
+
+def _get_user_or_404(user_id: str) -> Dict[str, Any]:
+    """Fetch user by id, or raise 404."""
+    conn = _pg_conn()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT user_id, api_key_hash, role, display_name, monthly_quota, monthly_used, "
+                "api_key_prefix, created_at, last_seen_at, last_reset_at FROM v3_users WHERE user_id=%s",
+                (user_id,))
+            row = cur.fetchone()
+    finally:
+        _pg_release(conn)
+    if not row:
+        raise HTTPException(status_code=404, detail=f"user {user_id} not found")
+    return dict(row)
+
+
+@app.get("/api/v1/users/me", response_model=UserOut)
+async def get_me(user: str = Depends(_verify_user)):
+    """Return the current authenticated user."""
+    row = _get_user_or_404(user)
+    return UserOut(**{k: row[k] for k in [
+        "user_id", "role", "display_name", "monthly_quota", "monthly_used",
+        "api_key_prefix", "created_at", "last_seen_at",
+    ]})
+
+
+@app.get("/api/v1/users/me/jobs")
+async def list_my_jobs(
+    user: str = Depends(_verify_user),
+    limit: int = 50,
+    status: Optional[str] = None,
+    tc: Optional[str] = None,
+):
+    """List jobs for the current user (history view)."""
+    limit = max(1, min(limit, MAX_LIST_LIMIT))
+    conn = _pg_conn()
+    try:
+        with conn.cursor() as cur:
+            sql = """
+            SELECT job_id, tc, status, progress, worker_id, output_file, output_size,
+                   created_at, started_at, finished_at, error
+            FROM v3_jobs WHERE user_id=%s
+            """
+            args = [user]
+            if status:
+                sql += " AND status=%s"
+                args.append(status)
+            if tc:
+                sql += " AND tc=%s"
+                args.append(tc)
+            sql += " ORDER BY created_at DESC LIMIT %s"
+            args.append(limit)
+            cur.execute(sql, args)
+            rows = cur.fetchall()
+    finally:
+        _pg_release(conn)
+    return {
+        "user_id": user,
+        "total": len(rows),
+        "jobs": [dict(r) for r in rows],
+    }
+
+
+@app.get("/api/v1/users/me/stats")
+async def get_my_stats(user: str = Depends(_verify_user)):
+    """Per-user stats: total jobs, success rate, total duration, active count."""
+    conn = _pg_conn()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT status, COUNT(*) AS n,
+                       COALESCE(SUM(finished_at - started_at), 0) AS total_dur,
+                       COALESCE(SUM(COALESCE(output_size, 0)), 0) AS total_bytes
+                FROM v3_jobs WHERE user_id=%s
+                GROUP BY status
+                """,
+                (user,))
+            rows = cur.fetchall()
+            cur.execute(
+                "SELECT COUNT(*) FROM v3_jobs WHERE user_id=%s AND status IN ('queued','running')",
+                (user,))
+            active = cur.fetchone()
+    finally:
+        _pg_release(conn)
+    by_status = {r["status"]: {"n": r["n"], "total_dur": float(r["total_dur"]), "total_bytes": int(r["total_bytes"])} for r in rows}
+    total_jobs = sum(r["n"] for r in rows)
+    succeeded = by_status.get("succeeded", {}).get("n", 0)
+    success_rate = (succeeded / total_jobs) if total_jobs else 0.0
+    return {
+        "user_id": user,
+        "total_jobs": total_jobs,
+        "active_jobs": active["count"] if active else 0,
+        "success_rate": round(success_rate, 3),
+        "total_duration_sec": float(sum(r["total_dur"] for r in rows)),
+        "total_bytes_processed": int(sum(r["total_bytes"] for r in rows)),
+        "by_status": by_status,
+    }
+
+
+@app.get("/api/v1/dashboard")
+async def dashboard(
+    user: str = Depends(_verify_user),
+    limit: int = 20,
+):
+    """Lightweight JSON dashboard for the current user."""
+    stats = await get_my_stats(user=user)
+    jobs = await list_my_jobs(user=user, limit=limit)
+    return {
+        "user": stats,
+        "recent_jobs": jobs["jobs"][:limit],
+    }
 
 
 @app.delete("/api/cluster/workers/{worker_id}")
