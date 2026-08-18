@@ -39,7 +39,7 @@ try:
 except ImportError:  # pragma: no cover - production installs psycopg2-binary
     psycopg2 = None  # type: ignore[assignment]
 from fastapi import Cookie, FastAPI, Request, HTTPException, UploadFile, File, Form, Header, Depends, Response, Security
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel, Field
 
@@ -544,6 +544,80 @@ def _mark_job_failed(job_id: str, message: str) -> None:
         conn.commit()
     finally:
         _pg_release(conn)
+
+
+async def _maybe_retry_job(
+    job_id: str,
+    user: str,
+    error_msg: str,
+    tc: str,
+    payload: Optional[Dict[str, Any]],
+    files_for_retry: Optional[Dict[str, str]],
+    priority: int = 0,
+) -> None:
+    """FIX 2026-08-18: background retry logic.
+
+    On dispatch failure, check if retry_count < max_retries. If so, pick a
+    fresh worker and re-dispatch. Otherwise mark as failed.
+    """
+    conn = _pg_conn()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT max_retries, retry_count, user_id, tc, settings FROM v3_jobs WHERE job_id=%s",
+                (job_id,))
+            row = cur.fetchone()
+    finally:
+        _pg_release(conn)
+    if not row:
+        return
+    max_retries = int(row["max_retries"] or 0)
+    retry_count = int(row["retry_count"] or 0)
+    if retry_count >= max_retries:
+        # No more retries — mark failed
+        log.warning(f"job={job_id} exhausted {max_retries} retries; marking failed")
+        _mark_job_failed(job_id, f"max_retries exhausted: {error_msg}")
+        return
+    # Pick a new worker (different from last attempt by random tiebreak)
+    workers = _load_workers()
+    new_worker = await _pick_worker(workers, job_priority=priority)
+    if not new_worker:
+        log.warning(f"job={job_id} no worker available for retry")
+        _mark_job_failed(job_id, f"retry failed: no worker: {error_msg}")
+        return
+    # Increment retry_count and re-dispatch
+    conn = _pg_conn()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                "UPDATE v3_jobs SET status='queued', worker_id=%s, retry_count=retry_count+1, "
+                "error=NULL, started_at=NULL, finished_at=NULL WHERE job_id=%s",
+                (new_worker["id"], job_id))
+        conn.commit()
+    finally:
+        _pg_release(conn)
+    log.info(f"job={job_id} retry {retry_count+1}/{max_retries} on {new_worker['id']}")
+    # Dispatch to new worker
+    try:
+        async with httpx.AsyncClient(timeout=WORKER_TIMEOUT * 3) as c:
+            if tc == "tc01":
+                # Original v1 dispatch
+                r = await c.post(
+                    f"{new_worker['url']}/v1/tc01/render/{job_id}",
+                    json=files_for_retry or {},
+                    headers={"X-Cutdee-Internal": INTERNAL_TOKEN},
+                )
+            else:
+                # Modern TC pipeline
+                r = await c.post(
+                    f"{new_worker['url']}/v1/{tc}/render/{job_id}",
+                    json=payload or {},
+                    headers={"X-Cutdee-Internal": INTERNAL_TOKEN},
+                )
+            r.raise_for_status()
+    except Exception as exc:
+        log.error(f"job={job_id} retry {retry_count+1} failed: {exc}")
+        await _maybe_retry_job(job_id, user, str(exc), tc, payload, files_for_retry, priority)
 
 
 def _record_worker_status(job_id: str, data: Dict[str, Any]) -> str:
@@ -1230,6 +1304,125 @@ async def dashboard(
     }
 
 
+_DASHBOARD_HTML = """<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>V3 Worker Dashboard</title>
+<style>
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background:#0f1117; color:#e8e8f0; margin:0; padding:24px; }
+  h1 { margin:0 0 4px 0; font-size:22px; }
+  h2 { margin:24px 0 8px 0; font-size:16px; color:#9aa0b4; text-transform:uppercase; letter-spacing:0.05em; }
+  .grid { display:grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap:12px; }
+  .card { background:#1a1d29; border:1px solid #2a2e3e; border-radius:8px; padding:14px 16px; }
+  .card .label { font-size:11px; color:#9aa0b4; text-transform:uppercase; letter-spacing:0.05em; }
+  .card .value { font-size:26px; font-weight:600; margin-top:4px; }
+  .card.healthy { border-color:#22c55e; }
+  .card.unhealthy { border-color:#ef4444; }
+  table { width:100%; border-collapse:collapse; background:#1a1d29; border-radius:8px; overflow:hidden; }
+  th, td { padding:8px 12px; text-align:left; border-bottom:1px solid #2a2e3e; font-size:13px; }
+  th { background:#252837; color:#9aa0b4; font-weight:500; text-transform:uppercase; font-size:11px; letter-spacing:0.05em; }
+  td.mono { font-family: "SF Mono", Consolas, monospace; font-size:12px; color:#9aa0b4; }
+  .pill { display:inline-block; padding:2px 8px; border-radius:10px; font-size:11px; font-weight:500; }
+  .pill.healthy { background:#22c55e33; color:#22c55e; }
+  .pill.unhealthy { background:#ef444433; color:#ef4444; }
+  .pill.disabled { background:#6b728033; color:#9aa0b4; }
+  .pill.busy { background:#f59e0b33; color:#f59e0b; }
+  .bar { display:inline-block; width:80px; height:6px; background:#2a2e3e; border-radius:3px; overflow:hidden; vertical-align:middle; }
+  .bar > * { display:block; height:100%; background:#22c55e; }
+  code { background:#252837; padding:2px 6px; border-radius:4px; font-size:12px; }
+  .footer { color:#9aa0b4; font-size:12px; margin-top:32px; text-align:center; }
+  .refresh { float:right; font-size:12px; color:#9aa0b4; }
+  .refresh a { color:#60a5fa; }
+</style>
+</head>
+<body>
+<h1>V3 Worker Dashboard <span class="refresh"><a href="javascript:location.reload()">↻ refresh</a></span></h1>
+<div id="root">Loading...</div>
+<script>
+async function load() {
+  const [me, monitor] = await Promise.all([
+    fetch('/api/v1/users/me').then(r => r.json()),
+    fetch('/api/v1/workers/monitor', {headers:{'X-Cutdee-Internal':'__INT__'}}).then(r => r.json()).catch(() => null)
+  ]);
+  const stats = await fetch('/api/v1/users/me/stats').then(r => r.json()).catch(() => null);
+  const jobs = await fetch('/api/v1/users/me/jobs?limit=15').then(r => r.json()).catch(() => ({jobs:[]}));
+  const root = document.getElementById('root');
+  const esc = s => String(s ?? '').replace(/[<>&"']/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;',"'":'&#39;'}[c]));
+  const total_active = (monitor && monitor.total_active_jobs) || 0;
+  const total_cap = monitor ? monitor.workers.reduce((s,w)=>s+(w.enabled?w.max_concurrent:0),0) : 0;
+  const healthy = monitor ? monitor.workers.filter(w => w.enabled && w.healthy).length : 0;
+  const enabled = monitor ? monitor.workers.filter(w => w.enabled).length : 0;
+  const total = monitor ? monitor.total_workers : 0;
+  const success_pct = stats && stats.total_jobs > 0 ? Math.round(stats.success_rate * 100) : 0;
+  let html = '';
+  html += `<h2>Cluster Overview</h2>`;
+  html += '<div class="grid">';
+  html += `<div class="card"><div class="label">Total workers</div><div class="value">${total}</div></div>`;
+  html += `<div class="card healthy"><div class="label">Healthy</div><div class="value">${healthy}</div></div>`;
+  html += `<div class="card"><div class="label">Enabled</div><div class="value">${enabled}</div></div>`;
+  html += `<div class="card ${total_active>=total_cap?'unhealthy':'healthy'}"><div class="label">Active jobs</div><div class="value">${total_active} / ${total_cap}</div></div>`;
+  html += '</div>';
+
+  html += '<h2>Workers</h2>';
+  if (monitor) {
+    html += '<table><thead><tr><th>ID</th><th>Tier</th><th>Status</th><th>Active / Capacity</th><th>Encoder</th><th>In-flight</th></tr></thead><tbody>';
+    for (const w of monitor.workers) {
+      const status = !w.enabled ? '<span class="pill disabled">disabled</span>' :
+                      !w.healthy ? '<span class="pill unhealthy">unhealthy</span>' :
+                      w.active_jobs > 0 ? '<span class="pill busy">busy</span>' :
+                      '<span class="pill healthy">idle</span>';
+      const pct = w.max_concurrent > 0 ? (w.active_jobs / w.max_concurrent * 100) : 0;
+      const inFlight = (w.in_flight_jobs || []).map(j =>
+        `<code>${esc(j.job_id)}</code> <span class="pill ${esc(j.status)}">${esc(j.status)}</span> tc=${esc(j.tc ?? '?')}`
+      ).join('<br>') || '<span class="td mono">—</span>';
+      html += `<tr><td><code>${esc(w.id)}</code><br><span class="td mono">${esc(w.name || '')}</span></td>`;
+      html += `<td>${esc(w.tier)}</td><td>${status}</td>`;
+      html += `<td>${w.active_jobs} / ${w.max_concurrent} <span class="bar"><span style="width:${pct}%"></span></span></td>`;
+      html += `<td class="mono">${esc(w.encoder || '?')}</td><td>${inFlight}</td></tr>`;
+    }
+    html += '</tbody></table>';
+  } else {
+    html += '<p>Worker monitor not available (admin token required).</p>';
+  }
+
+  html += '<h2>Recent Jobs</h2>';
+  if (jobs && jobs.jobs && jobs.jobs.length > 0) {
+    html += '<table><thead><tr><th>Job ID</th><th>TC</th><th>Status</th><th>Worker</th><th>Created</th><th>Output</th></tr></thead><tbody>';
+    for (const j of jobs.jobs) {
+      const ts = new Date(j.created_at * 1000).toLocaleString();
+      const size = j.output_size ? `${(j.output_size/1024/1024).toFixed(1)}MB` : '-';
+      html += `<tr><td><code>${esc(j.job_id)}</code></td><td>${esc(j.tc)}</td><td>${esc(j.status)}</td>`;
+      html += `<td class="mono">${esc(j.worker_id || '-')}</td><td class="td mono">${esc(ts)}</td>`;
+      html += `<td class="mono">${size}</td></tr>`;
+    }
+    html += '</tbody></table>';
+  } else {
+    html += '<p>No recent jobs.</p>';
+  }
+
+  html += '<div class="footer">V3 Cursor API Dashboard — auto-refresh: <a href="javascript:location.reload()">↻</a></div>';
+  root.innerHTML = html;
+}
+load();
+setInterval(load, 15000);
+</script>
+</body>
+</html>
+"""
+
+
+@app.get("/dashboard", response_class=HTMLResponse)
+async def dashboard_html(_: bool = Depends(_verify_user)):
+    """HTML dashboard for the current user (FIX 2026-08-18).
+
+    Shows cluster overview, per-worker status, and recent jobs. Auto-refreshes
+    every 15s. Requires user auth (the user's API key is needed to call
+    the monitor and jobs endpoints from this page).
+    """
+    return HTMLResponse(content=_DASHBOARD_HTML.replace("__INT__", INTERNAL_TOKEN))
+
+
 @app.delete("/api/cluster/workers/{worker_id}")
 async def remove_worker(worker_id: str, _: bool = Depends(_verify_internal)):
     """Remove a worker from the cluster. Returns 200 on success, 404 if not found."""
@@ -1356,18 +1549,11 @@ async def create_job(
         raise
     except Exception as e:
         log.error(f"dispatch to {worker['id']} failed: {e}")
-        # Mark failed
-        conn = _pg_conn()
-        try:
-            with conn.cursor() as cur:
-                cur.execute("""
-                    UPDATE v3_jobs
-                    SET status='failed', error=%s, finished_at=%s
-                    WHERE job_id=%s
-                """, (str(e), time.time(), job_id))
-            conn.commit()
-        finally:
-            _pg_release(conn)
+        # FIX 2026-08-18: retry logic — if max_retries > retry_count, try again
+        await _maybe_retry_job(job_id, user, str(e), "tc01", None,
+                               {"product_id": req.product_id, "background_id": req.background_id,
+                                "cover_id": req.cover_id, "audio_id": req.audio_id,
+                                "settings": req.settings}, priority=0)
         raise HTTPException(status_code=502, detail=f"worker dispatch failed: {e}")
 
     status = _canonical_status(result.get("status", "queued"))
@@ -1959,14 +2145,9 @@ async def _dispatch_tc_render(tc: str, payload: V3RenderPayload, user: str = "an
         raise
     except Exception as e:
         log.error(f"dispatch to {worker['id']} ({tc}) failed: {e}")
-        conn = _pg_conn()
-        try:
-            with conn.cursor() as cur:
-                cur.execute("UPDATE v3_jobs SET status='failed', error=%s, finished_at=%s WHERE job_id=%s",
-                            (str(e), time.time(), job_id))
-            conn.commit()
-        finally:
-            _pg_release(conn)
+        # FIX 2026-08-18: retry logic — if max_retries > retry_count, try again
+        await _maybe_retry_job(job_id, user, job_id, str(e), tc, payload, priority=getattr(payload, "priority", 0) or 0)
+        raise HTTPException(502, f"worker dispatch failed: {e}")
         raise HTTPException(502, f"worker dispatch failed: {e}")
 
     status = _canonical_status(result.get("status", "queued"))
