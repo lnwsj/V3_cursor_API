@@ -157,6 +157,31 @@ def _job_dir(job_id: str) -> Path:
     return directory
 
 
+def _jobs_list_active_jobs() -> Dict[str, Any]:
+    """Return list of jobs currently in-flight. Used by both the /v1/active_jobs
+    endpoint and the gateway worker monitor endpoint.
+    """
+    with _JOBS_LOCK:
+        inflight = []
+        for jid, state in _JOBS.items():
+            status = state.get("status") or "running"
+            if status in ("succeeded", "failed", "cancelled", "completed"):
+                continue
+            inflight.append({
+                "job_id": jid,
+                "status": status,
+                "started_at": state.get("started_at"),
+                "tc": state.get("tc"),
+                "log_tail": list(state.get("log") or [])[-5:],
+            })
+    return {
+        "worker_id": WORKER_ID,
+        "active_jobs": len(inflight),
+        "max_concurrent": int(os.getenv("WORKER_MAX_CONCURRENT", "2")),
+        "jobs": inflight,
+    }
+
+
 def _state_path(job_id: str) -> Path:
     return _job_dir(job_id) / ".job_state.json"
 
@@ -495,6 +520,17 @@ def _verify_internal(x_cutdee_internal: Optional[str] = Header(None)) -> bool:
     if not INTERNAL_TOKEN or not x_cutdee_internal or x_cutdee_internal != INTERNAL_TOKEN:
         raise HTTPException(status_code=401, detail="invalid or missing X-Cutdee-Internal header")
     return True
+
+
+@app.get("/v1/active_jobs")
+async def list_active_jobs_endpoint(_: bool = Depends(_verify_internal)):
+    """List jobs currently in-flight on this worker (FIX 2026-08-18).
+
+    Used by the gateway worker monitor endpoint to surface what each worker
+    is doing right now. Returns: worker_id, active_jobs count, max_concurrent,
+    jobs[{job_id, status, started_at, tc, log_tail}].
+    """
+    return _jobs_list_active_jobs()
 
 
 # ---------------------------------------------------------------------------
