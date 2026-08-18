@@ -469,10 +469,19 @@ async def _worker_alive(w: Dict[str, Any]) -> bool:
     return res.get("ok") is True
 
 
-async def _pick_worker(workers: List[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
-    """Pick the least-loaded healthy worker using live active_jobs when available."""
+async def _pick_worker(
+    workers: List[Dict[str, Any]],
+    job_priority: int = 0,
+    required_tc: Optional[str] = None,
+) -> Optional[Dict[str, Any]]:
+    """Pick the best worker using live active_jobs + priority + TC support.
+
+    Sort key: (active_jobs, -priority, random), then filtered by enabled
+    and healthy. ``required_tc`` filters by TC capability when provided.
+    """
     if not workers:
         return None
+
     candidates = []
     for w in workers:
         if not w.get("enabled", True):
@@ -487,11 +496,21 @@ async def _pick_worker(workers: List[Dict[str, Any]]) -> Optional[Dict[str, Any]
         max_c = w.get("max_concurrent", 1)
         if active >= max_c:
             continue
-        candidates.append((active, w))
+        # Optional TC capability filter
+        if required_tc:
+            supported_tcs = set(health.get("supported_tcs") or []) or None
+            if supported_tcs is not None and required_tc not in supported_tcs:
+                continue
+        # Worker priority (higher preferred)
+        worker_priority = int(w.get("priority") or 0)
+        candidates.append((active, -worker_priority, w))
+
     if not candidates:
         return None
-    candidates.sort(key=lambda x: (x[0], secrets.token_hex(2)))
-    return candidates[0][1]
+
+    # Sort: active_jobs asc, then worker_priority desc, then random for tie
+    candidates.sort(key=lambda x: (x[0], x[1], secrets.token_hex(2)))
+    return candidates[0][2]
 
 
 def _canonical_status(value: Any) -> str:
@@ -880,6 +899,9 @@ class CreateJobRequest(BaseModel):
     cover_id: Optional[str] = None
     audio_id: Optional[str] = None
     settings: Optional[Dict[str, Any]] = None
+    priority: int = 0  # higher = picked first (default 0)
+    max_retries: int = 0  # 0 = no retry, > 0 = retry this many times on failure
+    tc: Optional[str] = None  # if set, dispatch only to workers supporting this TC
 
 
 class WorkerSpec(BaseModel):
@@ -1018,6 +1040,69 @@ async def update_worker(worker_id: str, update: WorkerUpdate, _: bool = Depends(
 # =====================================================================
 # Members / Users / History endpoints (FIX 2026-08-18)
 # =====================================================================
+
+async def _fetch_worker_active_jobs(worker: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """Fetch in-flight jobs for a worker via /v1/active_jobs."""
+    if not worker.get("enabled", True):
+        return []
+    try:
+        async with httpx.AsyncClient(timeout=3.0) as c:
+            r = await c.get(
+                f"{worker['url'].rstrip('/')}/v1/active_jobs",
+                headers={"X-Cutdee-Internal": INTERNAL_TOKEN},
+            )
+            if r.status_code != 200:
+                return []
+            data = r.json()
+            return data.get("jobs") or []
+    except Exception:
+        return []
+
+
+@app.get("/api/v1/workers/monitor")
+async def workers_monitor(_: bool = Depends(_verify_internal)):
+    """Live worker-status dashboard (FIX 2026-08-18).
+
+    Returns per-worker:
+    - enabled, healthy, tier, max_concurrent
+    - live active_jobs (number)
+    - live jobs list with job_id, status, started_at, log_tail
+    - url
+    """
+    workers = _load_workers()
+    snapshot = []
+    health_results = await asyncio.gather(
+        *[_worker_health(w) for w in workers], return_exceptions=True
+    )
+    jobs_results = await asyncio.gather(
+        *[_fetch_worker_active_jobs(w) for w in workers], return_exceptions=True
+    )
+    for w, h, j in zip(workers, health_results, jobs_results):
+        if isinstance(h, Exception):
+            h = {"ok": False, "error": str(h)[:120]}
+        if isinstance(j, Exception):
+            j = []
+        snapshot.append({
+            "id": w["id"],
+            "name": w.get("name", w["id"]),
+            "url": w["url"],
+            "enabled": w.get("enabled", True),
+            "healthy": h.get("ok") is True,
+            "tier": w.get("tier", "low"),
+            "max_concurrent": w.get("max_concurrent", 1),
+            "active_jobs": h.get("active_jobs", 0) if h.get("ok") else 0,
+            "encoder": (_encoder_names(h) or ["?"])[0] if h.get("ok") else "?",
+            "in_flight_jobs": list(j) if isinstance(j, list) else [],
+        })
+    return {
+        "ok": True,
+        "total_workers": len(workers),
+        "enabled_workers": sum(1 for w in workers if w.get("enabled", True)),
+        "healthy_workers": sum(1 for s in snapshot if s.get("healthy") and s["enabled"]),
+        "total_active_jobs": sum(s["active_jobs"] for s in snapshot if s["enabled"]),
+        "workers": snapshot,
+    }
+
 
 class UserOut(BaseModel):
     user_id: str
@@ -1206,7 +1291,7 @@ async def create_job(
 ):
     """Create a render job and dispatch to a worker."""
     workers = _load_workers()
-    worker = await _pick_worker(workers)
+    worker = await _pick_worker(workers, job_priority=req.priority, required_tc=req.tc)
     if not worker:
         raise HTTPException(status_code=503, detail="no_worker_available")
 
@@ -1815,9 +1900,11 @@ async def _dispatch_tc_render(tc: str, payload: V3RenderPayload, user: str = "an
     try:
         with conn.cursor() as cur:
             cur.execute("""INSERT INTO v3_jobs
-                (job_id, user_id, worker_id, tc, status, settings, created_at)
-                VALUES (%s, %s, %s, %s, %s, %s, %s)""",
+                (job_id, user_id, worker_id, tc, status, priority, max_retries, settings, created_at)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)""",
                 (job_id, user, worker["id"], tc, "queued",
+                 getattr(payload, "priority", 0) or 0,
+                 getattr(payload, "max_retries", 0) or 0,
                  json.dumps({**(payload.settings or {}), **(payload.values or {})}), t0))
         conn.commit()
     finally:
