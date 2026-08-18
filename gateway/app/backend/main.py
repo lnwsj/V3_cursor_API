@@ -248,20 +248,20 @@ async def api_render_tc(tc: str, request: Request):
         if f and hasattr(f, "read"):
             data = await f.read()
             file_id = f"{role}_{int(time.time())}_{secrets.token_hex(8)}"
-            (UPLOADS_DIR / file_id).write_bytes(data)
+            (UPLOADS_DIR / f"{file_id}.mp4").write_bytes(data)
             file_map[role].append(file_id)
     for f in form.getlist("sources"):
         if hasattr(f, "read"):
             data = await f.read()
             file_id = f"source_{int(time.time())}_{secrets.token_hex(8)}"
-            (UPLOADS_DIR / file_id).write_bytes(data)
+            (UPLOADS_DIR / f"{file_id}.mp4").write_bytes(data)
             file_map["source"].append(file_id)
     for fld, role in (("products", "product"), ("backgrounds", "background"), ("audios", "audio")):
         for f in form.getlist(fld):
             if hasattr(f, "read"):
                 data = await f.read()
                 file_id = f"{role}_{int(time.time())}_{secrets.token_hex(8)}"
-                (UPLOADS_DIR / file_id).write_bytes(data)
+                (UPLOADS_DIR / f"{file_id}.mp4").write_bytes(data)
                 file_map[role].append(file_id)
     for k, v in form.items():
         if k in ("product", "background", "cover", "audio", "sources", "products", "backgrounds", "audios"):
@@ -292,13 +292,13 @@ async def api_render_tc(tc: str, request: Request):
         async with httpx.AsyncClient(timeout=WORKER_TIMEOUT) as c:
             for role in ("product", "background", "cover", "audio", "source"):
                 for file_id in file_map[role]:
-                    src_path = UPLOADS_DIR / file_id
+                    src_path = UPLOADS_DIR / f"{file_id}.mp4"
                     if not src_path.is_file():
                         continue
                     r = await c.post(
                         f"{worker['url']}/v1/jobs/{job_id}/upload/{role}",
                         content=src_path.read_bytes(),
-                        headers={"X-Cutdee-Internal": INTERNAL_TOKEN, "Content-Disposition": f"attachment; filename={file_id}"},
+                        headers={"X-Cutdee-Internal": INTERNAL_TOKEN, "Content-Disposition": f"attachment; filename={file_id}.mp4"},
                     )
                     r.raise_for_status()
             render_payload = {"mode": tc, "settings": settings}
