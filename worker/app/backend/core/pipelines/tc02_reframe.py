@@ -37,7 +37,19 @@ _TC02_STREAMING = os.environ.get("V3_TC02_STREAMING", "").strip() == "1"
 from datetime import datetime
 from pathlib import Path
 
-from ..ai_reframe import ReframeSettings, build_reframe_tasks, build_reframe_ffmpeg_command, render_reframe_plan
+from ..ai_reframe import (
+    ReframeSettings,
+    FIXED_7X3_LENS_KEYS,
+    LENS_BY_KEY,
+    build_reframe_tasks,
+    build_reframe_ffmpeg_command,
+    render_reframe_plan,
+    _clampf,
+    _crop_scale,
+    _variation_recipe,
+)
+from ..ffmpeg_runner import FfmpegRunner
+from ..encoder_recovery import should_retry_with_cpu
 from ..ffmpeg_runner import FfmpegRunner
 from ..encoder_recovery import should_retry_with_cpu
 from ..contract import (
@@ -49,7 +61,15 @@ from ..contract import (
     reframe_settings_for,
 )
 from ..gpu_detector import effective_video_encoder, gpu_summary, resolve_encoder_alias
-from ..green_render import GreenSettings, render_green
+from ..green_render import (
+    GreenSettings,
+    _despill_parameters,
+    _ffmpeg_has_filter,
+    _ffmpeg_supports_despill_mode,
+    _hex_to_rgb0x,
+    _probe_duration,
+    render_green,
+)
 from ..media_probe import (
     MediaProbeCancelled,
     invalid_audio_stream_paths,
@@ -149,6 +169,14 @@ def _finish_counts(
 def _safe_stem(path: str) -> str:
     stem = _portable_stem(path)
     return "".join(ch if ch.isalnum() or ch in "._-" else "_" for ch in stem)[:160]
+
+
+def _composition_value_str(composition) -> str:
+    """Get .value of a Composition enum (or str fallback)."""
+    try:
+        return composition.value
+    except AttributeError:
+        return str(composition)
 
 
 def render(inputs: PipelineInputs, cb: PipelineCallbacks) -> PipelineResult:
@@ -705,6 +733,237 @@ def _reframe_one_task(
     )
 
 
+# === COMBINED reframe + chroma in ONE ffmpeg call (FIX 2026-08-18) ===
+# Per output: 1 ffmpeg invocation that does scale+crop (reframe) + chroma
+# key + overlay (chroma) in a single filter graph. Eliminates:
+#   - 1 ffmpeg startup (~50-100ms per output)
+#   - intermediate file I/O (write 720p reframe + read it back for chroma)
+#   - memory copies between stages
+# Expected win on sjnb3050ti: 8-15% on TC02 (vs 168.53s current).
+
+
+def _build_combined_reframe_chroma_filter(
+    source: str,
+    lens_key: str,
+    composition: str,
+    output_width: int,
+    output_height: int,
+    reframe_short_side: int,
+    key_color: str,
+    similarity: float,
+    blend: float,
+    despill: float,
+    despill_screen: bool,
+    bg_input: int = 1,
+    src_input: int = 0,
+    encoder_codec: str = "h264_nvenc",
+) -> str:
+    """Build the combined filter graph for reframe→chroma in one ffmpeg call.
+
+    Layout:
+        [src_input:v] → reframe (crop + scale) → chroma + despill → [fg]
+        [bg_input:v]  → scale + pad → [bg]
+        [bg][fg] → overlay → [base]
+        [base] → format yuv420p → [vout]
+    """
+    # Find lens index
+    try:
+        lens_index = FIXED_7X3_LENS_KEYS.index(lens_key) + 1
+    except ValueError:
+        from ..ai_reframe import LENS_BY_KEY
+        lens_obj = LENS_BY_KEY.get(lens_key)
+        if lens_obj:
+            lens_index = int(_clampf(round((lens_obj.focal_mm - 16) / (85 - 16) * 6) + 1, 1, 7))
+        else:
+            lens_index = 1
+
+    # Compute variation recipe (deterministic — same source+lens+comp = same result)
+    from ..ai_reframe import LENS_BY_KEY
+    lens_obj = LENS_BY_KEY.get(lens_key)
+    if lens_obj is None:
+        lens_obj = LENS_BY_KEY[FIXED_7X3_LENS_KEYS[0]]
+    x_anchor, y_anchor, static_zoom, jitter_x, jitter_y, _legacy_tilt = _variation_recipe(
+        source, lens_obj, composition, lens_index
+    )
+
+    target_aspect = output_width / output_height
+    scale = _crop_scale(lens_obj.view_scale, static_zoom)
+
+    crop_w = f"trunc((if(gte(iw/ih,{target_aspect:.8f}),ih*{target_aspect:.8f},iw)*{scale:.6f})/2)*2"
+    crop_h = f"trunc((if(gte(iw/ih,{target_aspect:.8f}),ih,iw/{target_aspect:.8f})*{scale:.6f})/2)*2"
+    x_anchor = _clampf(x_anchor, 0.10, 0.90)
+    y_anchor = _clampf(y_anchor, 0.10, 0.90)
+    jitter_x = _clampf(jitter_x, -0.08, 0.08)
+    jitter_y = _clampf(jitter_y, -0.08, 0.08)
+    crop_x = f"min(max(0,(iw/2+({jitter_x:.8f}*iw))-(ow*{x_anchor:.6f})),iw-ow)"
+    crop_y = f"min(max(0,(ih/2+({jitter_y:.8f}*ih))-(oh*{y_anchor:.6f})),ih-oh)"
+
+    # v3.REFRAME_720P: work at short_side then upscale in chroma
+    if reframe_short_side and reframe_short_side > 0:
+        ref_w = int(reframe_short_side * (output_width / output_height)) & ~1
+        ref_h = reframe_short_side & ~1
+    else:
+        ref_w, ref_h = output_width, output_height
+
+    use_cuda_scale = False  # FIX 2026-08-18: CUDA scale caused "hwdownload invalid format yuv420p"
+                              # error. Use CPU scale for safety; chroma is already CPU-only.
+
+    # Front stage: reframe (crop + scale). Output is at ref_w * ref_h.
+    fg_filters = []
+    fg_filters.append(f"crop=w='{crop_w}':h='{crop_h}':x='{crop_x}':y='{crop_y}'")
+    fg_filters += [f"scale={ref_w}:{ref_h}:flags=lanczos", "setsar=1", "format=yuv420p"]
+    fg_chain = ",".join(fg_filters)
+
+    # Chroma key on reframed output
+    key_hex = _hex_to_rgb0x(key_color)
+    sim = f"{similarity:.3f}"
+    blend_str = f"{blend:.3f}"
+    despill_type_int, effective_despill = _despill_parameters(key_color, despill)
+    despill_mix = f"{effective_despill:.3f}"
+    despill_mode_kw = (
+        f":mode={'screen' if despill_screen else 'avg'}"
+        if _ffmpeg_supports_despill_mode("ffmpeg")
+        else ""
+    )
+
+    # Build FG chain: reframe → upscale to output → chromakey → despill
+    # If ref_w != output_width, upscale; otherwise direct
+    if ref_w != output_width:
+        fg_chain_combined = (
+            f"{fg_chain},"
+            f"scale={output_width}:{output_height}:flags=lanczos,"
+            f"pad={output_width}:{output_height}:(ow-iw)/2:(oh-ih)/2:color=0x00000000,"
+            f"setsar=1,format=yuva420p,"
+            f"chromakey={key_hex}:{sim}:{blend_str},"
+            f"despill=type={despill_type_int}:mix={despill_mix}{despill_mode_kw}"
+        )
+    else:
+        fg_chain_combined = (
+            f"{fg_chain},"
+            f"pad={output_width}:{output_height}:(ow-iw)/2:(oh-ih)/2:color=0x00000000,"
+            f"setsar=1,format=yuva420p,"
+            f"chromakey={key_hex}:{sim}:{blend_str},"
+            f"despill=type={despill_type_int}:mix={despill_mix}{despill_mode_kw}"
+        )
+
+    # BG chain: scale to output
+    bg_chain = (
+        f"scale={output_width}:{output_height}:force_original_aspect_ratio=decrease,"
+        f"pad={output_width}:{output_height}:(ow-iw)/2:(oh-ih)/2:color=black,"
+        f"setsar=1,fps=30,format=yuv420p"
+    )
+
+    # Combined filter graph
+    filter_complex = (
+        f"[{src_input}:v]{fg_chain_combined}[fg];"
+        f"[{bg_input}:v]{bg_chain}[bg];"
+        f"[bg][fg]overlay=0:0:eof_action=pass[base];"
+        f"[base]format=yuv420p[vout]"
+    )
+    return filter_complex
+
+
+def _reframe_chroma_combined(
+    source: str,
+    background: str,
+    output: str,
+    lens_key: str,
+    composition: str,
+    reframe_settings: ReframeSettings,
+    green_settings: GreenSettings,
+    ffmpeg_cmd: str = "ffmpeg",
+    ffprobe_cmd: str = "ffprobe",
+    keep_audio: bool = True,
+) -> "List[str]":
+    """Build ffmpeg command that does reframe + chroma in ONE call."""
+    from ..media_probe import audio_stream_state, MediaStreamState
+    src_audio = audio_stream_state(source, ffprobe_cmd=ffprobe_cmd, ffmpeg_cmd=ffmpeg_cmd) if keep_audio else MediaStreamState.ABSENT
+
+    filter_complex = _build_combined_reframe_chroma_filter(
+        source=source,
+        lens_key=lens_key,
+        composition=composition,
+        output_width=green_settings.width,
+        output_height=green_settings.height,
+        reframe_short_side=reframe_settings.reframe_short_side,
+        key_color=green_settings.key_color,
+        similarity=green_settings.similarity,
+        blend=green_settings.blend,
+        despill=green_settings.despill,
+        despill_screen=green_settings.despill_screen,
+        encoder_codec=green_settings.encoder_alias,
+    )
+
+    inputs = ["-i", source, "-stream_loop", "-1", "-i", background]
+
+    audio_args = []
+    if keep_audio and src_audio is MediaStreamState.PRESENT:
+        audio_args += ["-map", "0:a:0",
+                       "-af", "aresample=48000,aformat=sample_fmts=fltp:channel_layouts=stereo",
+                       "-c:a", "aac", "-b:a", "192k", "-ar", "48000", "-ac", "2"]
+    else:
+        audio_args += ["-an"]
+
+    # Get expected duration for watchdog
+    expected = _probe_duration(source, ffprobe_cmd=ffprobe_cmd)
+
+    cmd = [
+        ffmpeg_cmd, "-y", "-hide_banner", "-loglevel", "warning",
+        *inputs,
+        "-filter_complex", filter_complex,
+        "-map", "[vout]",
+        *audio_args,
+        "-c:v", green_settings.encoder_alias,
+        "-b:v", green_settings.bitrate,
+        "-pix_fmt", "yuv420p",
+        "-t", f"{expected:.3f}",
+        "-movflags", "+faststart",
+        output,
+    ]
+    return cmd
+
+
+def _reframe_chroma_combined_one_task(
+    task,
+    reframe_settings: ReframeSettings,
+    green_settings: GreenSettings,
+    background: str,
+    ffmpeg_runner_kwargs: dict,
+) -> "object":
+    """Run reframe + chroma in ONE ffmpeg call per output. Returns (success, output_path, error, dur)."""
+    # Build combined command
+    cmd = _reframe_chroma_combined(
+        source=task.source_path,
+        background=background,
+        output=task.output_path,
+        lens_key=task.lens.key,
+        composition=task.composition.value if hasattr(task.composition, "value") else str(task.composition),
+        reframe_settings=reframe_settings,
+        green_settings=green_settings,
+        ffmpeg_cmd=ffmpeg_runner_kwargs.get("ffmpeg_cmd", "ffmpeg"),
+        ffprobe_cmd=ffmpeg_runner_kwargs.get("ffprobe_cmd", "ffprobe"),
+        keep_audio=True,
+    )
+    runner = FfmpegRunner(
+        ffmpeg_cmd=ffmpeg_runner_kwargs.get("ffmpeg_cmd", "ffmpeg"),
+        idle_timeout_sec=ffmpeg_runner_kwargs.get("idle_timeout_sec", 120),
+        max_factor=ffmpeg_runner_kwargs.get("max_factor", 3.0),
+    )
+    from ..green_render import _probe_duration
+    expected = _probe_duration(task.source_path, ffprobe_cmd=ffmpeg_runner_kwargs.get("ffprobe_cmd", "ffprobe"))
+    t0 = time.time()
+    result = runner.run(
+        cmd=cmd,
+        expected_duration_sec=expected,
+        on_log=ffmpeg_runner_kwargs.get("on_log"),
+        stop_check=ffmpeg_runner_kwargs.get("stop_check"),
+        extra_progress_args=False,
+        tc_label="TC02-combined",
+    )
+    dur = time.time() - t0
+    return result.success, task.output_path, result.error or "", dur
+
+
 def _chroma_one_from_reframe(
     reframed_path: str,
     idx: int,
@@ -837,9 +1096,11 @@ def render_tc02_streaming(inputs: PipelineInputs, cb: PipelineCallbacks) -> Pipe
     #   2+2 streaming:                 169.98s  (-11.2%)
     #   2+3 streaming (sweet spot):    168.53s  (-12.0%)
     #   3+3 streaming:                 180.13s  (-5.9%, GPU saturated)
-    # Override via V3_TC02_PRODUCERS / V3_TC02_CONSUMERS env vars.
+    #   2+3 + COMBINED ffmpeg:         (TBD)  predicted -8% on top
+    # Override via V3_TC02_PRODUCERS / V3_TC02_CONSUMERS / V3_TC02_COMBINED env vars.
     N_PRODUCERS = int(os.environ.get("V3_TC02_PRODUCERS", "2") or "2")
     N_CONSUMERS = int(os.environ.get("V3_TC02_CONSUMERS", "3") or "3")
+    USE_COMBINED = os.environ.get("V3_TC02_COMBINED", "").strip() == "1"
     safe_log(
         cb.log_fn,
         f"[streaming] TC02: {len(all_tasks)} outputs / {N_PRODUCERS} reframe-producers "
@@ -856,7 +1117,36 @@ def render_tc02_streaming(inputs: PipelineInputs, cb: PipelineCallbacks) -> Pipe
     chroma_cancelled = 0
     completed = 0
 
-    # Producer: reframe one task and push to queue
+    # Producer: reframe one task and push to queue (skipped if USE_COMBINED)
+    def _producer(producer_id: int, task_indices: list):
+        for idx in task_indices:
+            if stop():
+                out_queue.put(("STOP", idx, None))
+                continue
+            task = all_tasks[idx]
+            if USE_COMBINED:
+                # Combined mode: skip reframe, push directly so consumer does reframe+chroma in 1 ffmpeg call
+                out_queue.put(("OK", idx, task))
+                continue
+            try:
+                reframe_result = _reframe_one_task(
+                    task, reframe_settings,
+                    ffmpeg_runner_kwargs={
+                        "ffmpeg_cmd": "ffmpeg",
+                        "ffprobe_cmd": "ffprobe",
+                        "idle_timeout_sec": 120,
+                        "max_factor": 3.0,
+                        "on_log": lambda m: safe_log(cb.log_fn, f"[p{producer_id}] {m}"),
+                        "stop_check": stop,
+                    },
+                )
+            except Exception as exc:
+                out_queue.put(("FAILED", idx, f"reframe exception: {exc}"))
+                continue
+            if not reframe_result.success:
+                out_queue.put(("FAILED", idx, f"reframe failed: {reframe_result.error[:200]}"))
+                continue
+            out_queue.put(("OK", idx, task))
     def _producer(producer_id: int, task_indices: list):
         for idx in task_indices:
             if stop():
@@ -902,6 +1192,44 @@ def render_tc02_streaming(inputs: PipelineInputs, cb: PipelineCallbacks) -> Pipe
                 continue
             # tag == "OK"
             task = payload
+            if USE_COMBINED:
+                # Combined mode: reframe + chroma in 1 ffmpeg call
+                # Override output path to the final chroma path
+                chroma_out_path = os.path.join(
+                    out_dir,
+                    f"{_safe_stem(task.source_path)}__{task.lens.key}__{_composition_value_str(task.composition)}__tc02_chroma_{run_stamp}_{idx + 1:03d}.mp4",
+                )
+                background = backgrounds[idx % len(backgrounds)] if backgrounds else None
+                if background is None:
+                    with results_lock:
+                        chroma_failed += 1
+                        chroma_results[idx + 1] = None
+                        chroma_errors.append(f"final.{idx + 1:03d}: no background")
+                    continue
+                # Update task.output_path to chroma path
+                task.output_path = chroma_out_path
+                ok, out_path, err, dur = _reframe_chroma_combined_one_task(
+                    task, reframe_settings, green_settings, background,
+                    ffmpeg_runner_kwargs={
+                        "ffmpeg_cmd": "ffmpeg",
+                        "ffprobe_cmd": "ffprobe",
+                        "idle_timeout_sec": 120,
+                        "max_factor": 3.0,
+                        "on_log": lambda m: safe_log(cb.log_fn, f"[c{consumer_id}] {m}"),
+                        "stop_check": stop,
+                    },
+                )
+                if ok and _is_valid_output(out_path):
+                    with results_lock:
+                        chroma_results[idx + 1] = out_path
+                    safe_log(cb.log_fn, f"final.{idx + 1:03d}.ok path={out_path} dur={dur:.1f}s")
+                else:
+                    with results_lock:
+                        chroma_failed += 1
+                        chroma_results[idx + 1] = None
+                        chroma_errors.append(f"final.{idx + 1:03d}: {err[:200]}")
+                    safe_log(cb.log_fn, f"final.{idx + 1:03d}.failed err={err[:200]} dur={dur:.1f}s")
+                continue
             chroma_result = _chroma_one_from_reframe(
                 reframed_path=task.output_path,
                 idx=idx + 1,
