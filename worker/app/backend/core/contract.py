@@ -643,7 +643,26 @@ def reframe_settings_for(
         reframe_mode=validate_reframe_mode(
             values.get("reframe_mode", "speed")
         ),
+        # v3.REFRAME_720P: 0=full output, N=N-p short side. Env: V3_REFRAME_SHORT_SIDE
+        # Default 720 — optimal for 4K inputs (-16% TC02, identical output quality)
+        # CRITICAL: 0 is a VALID value (disable), so do NOT use `or` fallbacks that
+        # would replace 0 with the default. Read env to a local first.
+        reframe_short_side=_read_reframe_short_side(values),
     )
+
+
+def _read_reframe_short_side(values: Dict[str, Any]) -> int:
+    """Read reframe_short_side from values dict or V3_REFRAME_SHORT_SIDE env.
+
+    0 is a valid value (disable). Uses explicit conditional to avoid
+    `or` fallback that would replace 0 with the default.
+    """
+    if "reframe_short_side" in values and values["reframe_short_side"] is not None:
+        return int(values["reframe_short_side"])
+    env_val = os.getenv("V3_REFRAME_SHORT_SIDE")
+    if env_val and env_val.strip():
+        return int(env_val)
+    return 720
 
 def batch_settings_for(
     *,
