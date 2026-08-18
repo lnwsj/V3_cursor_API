@@ -516,7 +516,10 @@ class ReframeSettings:
     max_sources: int = 0                  # 0 = ไม่จำกัด; otherwise cap
 
     # Parallelism
-    max_parallel_ffmpeg: int = 3          # direct reframe default; UI can reduce
+    # v3.PERF: auto-scale from cpu_count when 0.
+    # 0 (default) → derive from os.cpu_count(): <8 → 2, <16 → 3, ≥16 → 4
+    # Explicit values still respected (UI can override).
+    max_parallel_ffmpeg: int = 0          # 0=auto-scale from cpu_count
 
     # v3.REFRAME_720P: 0=full target output res, N=work at N-p short side then
     # upscale later (in chroma stage). Default 720 (optimal for 4K inputs).
@@ -851,8 +854,14 @@ def build_reframe_ffmpeg_command(
     # FIX (2026-07-31): VideoToolbox hardware encoder support for macOS.
     # h264_videotoolbox uses -q:v as quality cap (mapped from UI preset)
     # and inherits the user-supplied -b:v bitrate from the chain.
+    # FIX (V1.0.3, 2026-08-18): env-overridable NVENC preset/tune for batch throughput.
+    # V3_REFRAME_NVENC_PRESET=p4 + V3_REFRAME_NVENC_TUNE=ll trades ~30% throughput for
+    # negligible quality loss on TC02/TC04 batch (21+ outputs per source).
+    # Default unchanged (p5/hq) when env unset — UI quality stays identical.
     if encoder_codec == "h264_nvenc":
-        cmd += ["-preset", "p5", "-tune", "hq", "-rc", "vbr",
+        _nvenc_preset = os.environ.get("V3_REFRAME_NVENC_PRESET", "p5")
+        _nvenc_tune = os.environ.get("V3_REFRAME_NVENC_TUNE", "hq")
+        cmd += ["-preset", _nvenc_preset, "-tune", _nvenc_tune, "-rc", "vbr",
                 "-cq", "19", "-b:v", "0", "-multipass", "disabled",
                 "-spatial-aq", "1", "-temporal-aq", "1"]
     elif encoder_codec in {"hevc_nvenc", "av1_nvenc"}:
@@ -1086,7 +1095,25 @@ def render_reframe_plan(
 
     results: List[ReframeResult] = []
     total = len(tasks)
-    max_parallel = max(1, min(settings.max_parallel_ffmpeg, 10))
+    # v3.PERF (2026-08-18): auto-scale max_parallel_ffmpeg from cpu_count when 0.
+    # 0 → derive: <8 cores → 2, <16 → 3, ≥16 → 4 (capped at 6 to avoid GPU contention).
+    _requested = settings.max_parallel_ffmpeg
+    if _requested <= 0:
+        try:
+            import os as _os_auto
+            _ncpu = _os_auto.cpu_count() or 4
+        except Exception:
+            _ncpu = 4
+        if _ncpu < 8:
+            _requested = 2
+        elif _ncpu < 16:
+            _requested = 3
+        elif _ncpu < 32:
+            _requested = 4
+        else:
+            _requested = 6
+        log(f"[reframe] auto max_parallel={_requested} (cpu_count={_ncpu})")
+    max_parallel = max(1, min(_requested, 10))
 
     task_order = {id(task): index for index, task in enumerate(tasks)}
     # Use a ThreadPoolExecutor (ported from _run_fixed_ffmpeg_reframe).

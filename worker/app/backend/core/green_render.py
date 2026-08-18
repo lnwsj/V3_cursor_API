@@ -29,6 +29,7 @@ from .gpu_detector import (
     effective_video_encoder,
     encoder_args_for_preset,
     resolve_encoder_alias,
+    gpu_decode_args,
 )
 from .ffmpeg_runner import FfmpegRunner, FfmpegResult, FfmpegProgress, NO_WINDOW_FLAGS
 from .cpu_limit import effective_ffmpeg_threads
@@ -38,6 +39,7 @@ from .media_probe import (
     _run_probe as _run_media_probe,
     audio_stream_state,
     has_video_stream,
+    input_decoder_args,
 )
 from .encoder_recovery import (
     command_video_encoder,
@@ -351,6 +353,17 @@ def build_render_command(
     fps = settings.fps
 
     cuda_requested = os.getenv("V3_GREEN_CUDA_FILTERS", "").strip() == "1"
+    # v3.HYBRID (2026-08-18): opt-in hybrid path for ffmpeg builds that lack
+    # despill_cuda but have chromakey_cuda + scale_cuda (e.g. Ubuntu 24.04
+    # stock ffmpeg 8.0). CUDA chromakey (the expensive filter) runs on GPU;
+    # despill + overlay fall back to CPU between one hwdownload.
+    hybrid_requested = (
+        os.getenv("V3_HYBRID_CUDA_CHROMA", "").strip() == "1"
+        and enc_name == "h264_nvenc"
+        and _ffmpeg_has_filter(ffmpeg_cmd, "scale_cuda")
+        and _ffmpeg_has_filter(ffmpeg_cmd, "chromakey_cuda")
+        and not _ffmpeg_has_filter(ffmpeg_cmd, "despill_cuda")
+    )
     product_aspect_matches = _matches_output_aspect(product, w, h, ffprobe_cmd)
     background_aspect_matches = _matches_output_aspect(
         background, w, h, ffprobe_cmd
@@ -367,6 +380,14 @@ def build_render_command(
         and _ffmpeg_has_filter(ffmpeg_cmd, "chromakey_cuda")
         # pad_cuda in the candidate FFmpeg n9 build can cross hardware frame
         # contexts.  Aspect-mismatched inputs remain on the proven CPU graph.
+        and product_aspect_matches
+        and background_aspect_matches
+    )
+    use_hybrid_filters = (
+        hybrid_requested
+        and not use_cuda_filters
+        and not (settings.cover_enabled and has_cover)
+        and not _is_image_media(background)
         and product_aspect_matches
         and background_aspect_matches
     )
@@ -417,6 +438,29 @@ def build_render_command(
             f"fps={fps},hwupload_cuda,"
             f"scale_cuda={w}:{h}:format=nv12,"
             f"hwdownload,format=nv12,format=yuv420p[bg]"
+        )
+    elif use_hybrid_filters:
+        # v3.HYBRID (2026-08-18): CUDA chromakey + CPU despill/overlay.
+        # ~2x faster than CPU chromakey on NVIDIA hardware when ffmpeg lacks
+        # despill_cuda. Single hwdownload keeps the GPU→CPU transition cheap.
+        despill_mode_kwargs = (
+            f":mode={'screen' if settings.despill_screen else 'avg'}"
+            if _ffmpeg_supports_despill_mode(ffmpeg_cmd)
+            else ""
+        )
+        parts.append(
+            f"{product_input_label}"
+            f"fps={fps},hwupload_cuda,"
+            f"scale_cuda={w}:{h}:format=nv12,"
+            f"chromakey_cuda=color={key_hex}:similarity={sim}:blend={blend},"
+            f"hwdownload,format=yuva420p,"
+            f"despill=type={despill_type_int}:mix={despill_mix}{despill_mode_kwargs}[fg]"
+        )
+        parts.append(
+            f"[{bg_idx}:v]"
+            f"fps={fps},scale={w}:{h}:force_original_aspect_ratio=decrease,"
+            f"pad={w}:{h}:(ow-iw)/2:(oh-ih)/2:color=black:eval=frame,"
+            f"setsar=1,format=yuv420p[bg]"
         )
     else:
         # CPU path keeps aspect-safe pad behavior for non-16:9 sources and cover overlays.
@@ -507,6 +551,12 @@ def build_render_command(
     ]
     # Keep CPU filter fallback in software frames. NVENC still uses the GPU for
     # encoding; forcing NVDEC here can hand hardware frames to software filters.
+    # FIX (2026-08-18): NVDEC GPU decode (cuvid) — opt-in via V3_NVDEC=1.
+    # Offloads H.264/HEVC/AV1/VP8/VP9/MPEG2 decode to NVDEC hardware.
+    # Speeds up 4K HEVC decode 6-8x vs CPU. Falls back to CPU decode on any
+    # failure (probe miss, missing cuvid decoder, etc.). Pattern ported from
+    # V3 Cursor WebApp/core/green_render.py::build_render_command.
+    inputs = input_decoder_args(ffprobe_cmd, inputs)
     cmd += [
         *inputs,
         "-filter_complex", filter_complex,

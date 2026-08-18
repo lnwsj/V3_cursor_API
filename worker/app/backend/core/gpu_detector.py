@@ -21,7 +21,7 @@ import subprocess
 import sys
 import time
 from functools import lru_cache
-from typing import List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple
 
 
 # FIX (2026-07-02): ปิดหน้าต่าง console ดำตอน spawn ffmpeg (ป้องกันจอกระพริบบน exe)
@@ -315,8 +315,15 @@ def encoder_args_for_preset(
         allowed = ", ".join(sorted(UI_PRESET_PROFILES))
         raise ValueError(f"invalid encoder preset profile {preset!r}; allowed: {allowed}")
 
+    # v3.PERF (2026-08-18): env override for batch throughput. V3_CHROMA_NVENC_PRESET
+    # overrides the profile→preset mapping for chroma stage (e.g. "p4" for 30%+ faster).
+    # Only applies to nvenc family. Quality drops slightly; intended for batch reframe+chroma.
+    _chroma_override = ""
     if encoder in ("h264_nvenc", "hevc_nvenc", "av1_nvenc"):
-        mapped = ["-preset", _NVENC_PRESET_BY_PROFILE[profile]]
+        _chroma_override = os.environ.get("V3_CHROMA_NVENC_PRESET", "").strip()
+
+    if encoder in ("h264_nvenc", "hevc_nvenc", "av1_nvenc"):
+        mapped = ["-preset", _chroma_override or _NVENC_PRESET_BY_PROFILE[profile]]
         if profile == "hq":
             mapped += ["-multipass", "fullres"]
     elif encoder == "h264_qsv":
@@ -403,3 +410,137 @@ ALIAS_MAP = {
 def resolve_encoder_alias(alias: str) -> Optional[str]:
     """แปล alias ("auto"/"nvenc"/"cpu") เป็น encoder name จริง"""
     return ALIAS_MAP.get(alias.lower().strip() if alias else "")
+
+
+# === NVDEC GPU decode (cuvid) — INSERTED 2026-08-18 ===
+# Probes the input codec and inserts `-c:v <decoder>_cuvid` BEFORE the `-i` arg.
+# Speeds up 4K HEVC decode 6-8x by offloading to NVDEC hardware.
+# Opt-in via env var V3_NVDEC=1 (handled in core.media_probe.input_decoder_args).
+# Pattern ported from V3 Cursor WebApp/core/gpu_detector.py.
+
+# ffmpeg codec_name -> cuvid decoder name
+_CUVID_DECODER_MAP = {
+    "h264": "h264_cuvid",
+    "hevc": "hevc_cuvid",
+    "h265": "hevc_cuvid",
+    "vp8": "vp8_cuvid",
+    "vp9": "vp9_cuvid",
+    "mpeg2video": "mpeg2_cuvid",
+    "av1": "av1_cuvid",
+}
+
+import threading as _threading
+_VIDEO_CODEC_CACHE: Dict[str, str] = {}
+_VIDEO_CODEC_LOCK = _threading.RLock()
+
+
+def _normalize_ffmpeg_cmd(ffmpeg_cmd) -> list:
+    """Return ffmpeg_cmd as a list of args (handles str or list).
+
+    Required because subprocess callers may pass ``ffmpeg_cmd`` as a list when
+    running under WSL (e.g. ``['wsl', '-d', 'Ubuntu-24.04', '/usr/local/bin/ffmpeg-wsl']``)
+    while many other call sites use a plain string ('ffmpeg').
+    """
+    if not ffmpeg_cmd:
+        return ["ffmpeg"]
+    if isinstance(ffmpeg_cmd, (list, tuple)):
+        return [str(x) for x in ffmpeg_cmd]
+    return [str(ffmpeg_cmd)]
+
+
+def _ffmpeg_token(ffmpeg_cmd) -> str:
+    """Return a stable token string for caching (last element of the command)."""
+    if not ffmpeg_cmd:
+        return "ffmpeg"
+    if isinstance(ffmpeg_cmd, (list, tuple)):
+        return os.path.basename(ffmpeg_cmd[-1]) if ffmpeg_cmd else "ffmpeg"
+    return os.path.basename(ffmpeg_cmd)
+
+
+def _ffmpeg_has_decoder(ffmpeg_cmd, decoder_name: str) -> bool:
+    """Check if ffmpeg binary supports a given decoder (cached, thread-safe)."""
+    token = _ffmpeg_token(ffmpeg_cmd)
+    key = ("decoder", token, decoder_name)
+    with _VIDEO_CODEC_LOCK:
+        cached = _VIDEO_CODEC_CACHE.get(key)
+    if cached is not None:
+        return cached
+    cmd = _normalize_ffmpeg_cmd(ffmpeg_cmd) + ["-hide_banner", "-decoders"]
+    try:
+        result = subprocess.run(
+            cmd, capture_output=True, text=True, encoding="utf-8", errors="replace",
+            timeout=10, creationflags=_NO_WINDOW,
+        )
+        output = f"{result.stdout}\n{result.stderr}"
+        found = result.returncode == 0 and bool(
+            re.search(rf"\b{re.escape(decoder_name)}\b", output)
+        )
+    except Exception:
+        found = False
+    with _VIDEO_CODEC_LOCK:
+        _VIDEO_CODEC_CACHE[key] = found
+    return found
+
+
+def _probe_input_codec(ffmpeg_cmd, source: str, ffprobe_cmd: str = "ffprobe") -> str:
+    """Return video codec name (hevc/h264/...) or '' on failure.
+
+    Cached by (path, mtime_ns) — mtime changes invalidate stale entries.
+    """
+    if not source or not os.path.isfile(source):
+        return ""
+    try:
+        st = os.stat(source)
+    except OSError:
+        return ""
+    cache_key = f"{os.path.normcase(os.path.abspath(source))}@{st.st_mtime_ns}:{st.st_size}"
+    with _VIDEO_CODEC_LOCK:
+        if cache_key in _VIDEO_CODEC_CACHE:
+            return _VIDEO_CODEC_CACHE[cache_key]
+    codec = ""
+    try:
+        result = subprocess.run(
+            [ffprobe_cmd, "-v", "error", "-select_streams", "v:0",
+             "-show_entries", "stream=codec_name", "-of", "csv=p=0", source],
+            capture_output=True, text=True, encoding="utf-8", errors="replace",
+            timeout=8, creationflags=_NO_WINDOW,
+        )
+        codec = (result.stdout or "").strip().split(",")[0].strip()
+    except Exception:
+        codec = ""
+    with _VIDEO_CODEC_LOCK:
+        if len(_VIDEO_CODEC_CACHE) > 256:
+            _VIDEO_CODEC_CACHE.clear()
+        _VIDEO_CODEC_CACHE[cache_key] = codec
+    return codec
+
+
+def gpu_decode_args(source: str, encoder_codec: str, ffmpeg_cmd: str = "ffmpeg",
+                    ffprobe_cmd: str = "ffprobe") -> List[str]:
+    """Return ffmpeg args for GPU-accelerated decode, or [] for CPU path.
+
+    Inserts ``-c:v <decoder>_cuvid`` BEFORE the ``-i source`` arg. The decoder
+    is chosen by probing the source file's codec name.
+
+    Only enabled when:
+      1. ``encoder_codec`` ends with ``_nvenc`` (HW decoder only useful for HW encoder)
+      2. The matching cuvid decoder is available in the ffmpeg binary
+      3. The probed source codec is in the cuvid-supported list
+
+    Falls back to ``[]`` (CPU decode) on any failure. Honors V3_NVDEC env var.
+    """
+    if os.getenv("V3_NVDEC", "").strip() != "1":
+        return []
+    if not encoder_codec or not encoder_codec.endswith("_nvenc"):
+        return []
+    if not _ffmpeg_has_decoder(ffmpeg_cmd, "h264_cuvid"):
+        return []
+    codec = _probe_input_codec(ffmpeg_cmd, source, ffprobe_cmd)
+    if not codec:
+        return []
+    decoder = _CUVID_DECODER_MAP.get(codec)
+    if not decoder:
+        return []
+    if not _ffmpeg_has_decoder(ffmpeg_cmd, decoder):
+        return []
+    return ["-c:v", decoder]

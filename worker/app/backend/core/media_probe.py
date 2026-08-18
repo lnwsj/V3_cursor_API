@@ -420,3 +420,77 @@ def invalid_audio_stream_paths(
         ):
             invalid.append(value)
     return invalid
+
+
+# === NVDEC input decoder helpers (added 2026-08-18) ===
+# When V3_NVDEC=1, insert ``-c:v <codec>_cuvid`` BEFORE each ``-i <video>``
+# in the inputs list. Image inputs (PNG/JPG) and audio-only inputs are skipped
+# via the codec probe. Pattern ported from V3 Cursor WebApp/core/media_probe.py.
+
+_INPUT_CODEC_CACHE: Dict[str, str] = {}
+_INPUT_CODEC_LOCK = threading.RLock()
+_INPUT_CODEC_CACHE_MAX = 1024
+
+
+def probe_video_codec(ffprobe_cmd: str, path: str) -> str:
+    """Return video codec name (hevc/h264/...) or '' on failure.
+
+    Cached by (path, mtime_ns, size) — file changes invalidate stale entries.
+    Strips trailing commas from CSV output.
+    """
+    if not path or not os.path.isfile(path):
+        return ""
+    try:
+        st = os.stat(path)
+    except OSError:
+        return ""
+    cache_key = f"{os.path.normcase(os.path.abspath(path))}@{st.st_mtime_ns}:{st.st_size}"
+    with _INPUT_CODEC_LOCK:
+        if cache_key in _INPUT_CODEC_CACHE:
+            return _INPUT_CODEC_CACHE[cache_key]
+    codec = ""
+    try:
+        proc = subprocess.run(
+            [ffprobe_cmd, "-v", "error", "-select_streams", "v:0",
+             "-show_entries", "stream=codec_name", "-of", "csv=p=0", path],
+            capture_output=True, text=True, encoding="utf-8", errors="replace",
+            timeout=8, creationflags=NO_WINDOW_FLAGS,
+        )
+        codec = (proc.stdout or "").strip().split(",")[0].strip()
+    except Exception:
+        codec = ""
+    with _INPUT_CODEC_LOCK:
+        if len(_INPUT_CODEC_CACHE) > _INPUT_CODEC_CACHE_MAX:
+            _INPUT_CODEC_CACHE.clear()
+        _INPUT_CODEC_CACHE[cache_key] = codec
+    return codec
+
+
+def input_decoder_args(ffprobe_cmd: str, inputs: List[str]) -> List[str]:
+    """Insert ``-c:v <codec>_cuvid`` BEFORE each ``-i <video>`` in inputs.
+
+    When ``V3_NVDEC != "1"`` returns ``inputs`` unchanged (no-op). Image
+    inputs (PNG/JPG) are skipped (image2 demuxer handles them). Audio-only
+    inputs (no video stream) are also skipped via the codec probe.
+    """
+    if os.getenv("V3_NVDEC", "").strip() != "1":
+        return inputs
+    out: List[str] = []
+    i = 0
+    while i < len(inputs):
+        a = inputs[i]
+        if a == "-i" and i + 1 < len(inputs):
+            path = inputs[i + 1]
+            codec = probe_video_codec(ffprobe_cmd, path)
+            if codec == "hevc":
+                out += ["-c:v", "hevc_cuvid"]
+            elif codec == "h264":
+                out += ["-c:v", "h264_cuvid"]
+            # else: leave alone (image, audio, unsupported codec)
+            out.append(a)         # -i
+            out.append(path)      # path
+            i += 2
+        else:
+            out.append(a)
+            i += 1
+    return out
