@@ -191,11 +191,12 @@ def _encoder_smoke_test(encoder: str, ffmpeg_cmd: str = "ffmpeg") -> bool:
         cmd += ["-preset", "ultrafast"]
     elif encoder in ("h264_videotoolbox", "hevc_videotoolbox"):
         # FIX 2026-08-19: Apple Silicon optimizations (M4 Mac mini, etc.)
-        # - Allow hardware fallback (-allow_sw_hw 1) for missing paths
+        # - Allow software fallback when hardware encoding is unavailable
         # - Priority speed (-prio_speed 1) trades quality for ~2x throughput
         # - Multi-thread (M4 has 4P+6E cores; VT can use both)
         # - Force realtime=false (we control timing via -t)
-        cmd += ["-q:v", "75", "-b:v", "2000k", "-prio_speed", "1", "-allow_sw_hw", "1"]
+        # FFmpeg 8 names this option `allow_sw`; `allow_sw_hw` is not valid.
+        cmd += ["-q:v", "75", "-b:v", "2000k", "-prio_speed", "1", "-allow_sw", "1"]
 
     cmd += ["-f", "null", "-"]
 
