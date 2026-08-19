@@ -472,7 +472,7 @@ def input_decoder_args(ffprobe_cmd: str, inputs: List[str]) -> List[str]:
 
     Routing:
     - V3_NVDEC=1 AND non-Apple: ``-c:v <codec>_cuvid`` (NVIDIA NVDEC)
-    - V3_APPLE_HWACCEL=1 AND Apple: ``-c:v <codec>_videotoolbox`` (VideoToolbox)
+    - V3_APPLE_HWACCEL=1 AND Apple: ``-hwaccel videotoolbox`` for H.264/HEVC
     - Default: passthrough (CPU decode, no hwaccel)
 
     Image inputs (PNG/JPG) and audio-only inputs are skipped.
@@ -489,11 +489,10 @@ def input_decoder_args(ffprobe_cmd: str, inputs: List[str]) -> List[str]:
             codec = probe_video_codec(ffprobe_cmd, path)
             if is_apple:
                 # FIX 2026-08-19: VideoToolbox hardware (Apple Silicon M1/M2/M4)
-                # decodes h264/hevc on the GPU (free CPU + lower latency).
-                if codec == "hevc":
-                    out += ["-c:v", "hevc_videotoolbox"]
-                elif codec == "h264":
-                    out += ["-c:v", "h264_videotoolbox"]
+                # is selected as an input hwaccel, not as a decoder name.
+                # FFmpeg exposes h264_videotoolbox as an encoder, not decoder.
+                if codec in {"hevc", "h264"}:
+                    out += ["-hwaccel", "videotoolbox"]
             else:
                 if codec == "hevc":
                     out += ["-c:v", "hevc_cuvid"]
