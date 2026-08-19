@@ -2,27 +2,40 @@
 
 วันที่ทดสอบ: 2026-08-19 (เวลาไทย)
 
-## สรุปผล
+## Baseline ก่อน optimize
 
-Mac M4 worker (`m4-mlx`) ทำงานด้วย release `f6299fa` และ API version `1.2.0` ผลทดสอบ real-media ผ่านทั้ง TC01 และ TC02 โดยไม่มี output เสียหาย
+Mac M4 worker (`m4-mlx`) ที่ release `f6299fa` ใช้ sequential TC02 และ CPU budget default 50%:
 
 | Pipeline | Input | Outputs | เวลา | ผลลัพธ์ |
 |---|---:|---:|---:|---|
 | TC01 | 10 วินาที | 1 | เฉลี่ย 2.592 วินาที | 3/3 สำเร็จ |
 | TC02 | 10 วินาที | 21 | 154.805 วินาที | 21/21 สำเร็จ |
 
+## ผลหลัง optimize
+
+ผล acceptance ผ่าน Worker API จริงที่ release `aa671b5`:
+
+| Pipeline | Input | Outputs | เวลา | ผลลัพธ์ |
+|---|---:|---:|---:|---|
+| TC01 | 10 วินาที | 1 | 2.147 วินาที | succeeded |
+| TC02 | 10 วินาที | 21 | 34.692 วินาที | 21/21 สำเร็จ |
+
+ผล TC02 ใหม่เร็วกว่า baseline `154.805` วินาทีประมาณ `77.6%` และ logs ยืนยัน `h264_videotoolbox` กับ streaming `2+3`
+
 ## Environment
 
 - Worker: `m4-mlx`
 - Platform: Apple M4
 - Worker version: `1.2.0`
-- Release commit: `f6299fa`
-- Encoder: H.264 VideoToolbox
+- Release commit: `aa671b5`
+- Encoder: H.264 VideoToolbox พร้อม `-prio_speed 1`
 - Input resolution: `1280x720`
 - Input codec: H.264/AAC
 - Input duration: `10.000` วินาที
 - Worker concurrency: `2`
-- TC02 streaming: ปิดตาม production default
+- CPU budget: `100%` (`~/.green_pc/cpu_percent.txt`)
+- Input hwaccel: `-hwaccel videotoolbox`
+- TC02 streaming: เปิด `2 producers + 3 consumers`
 
 ## Test Method
 
@@ -33,10 +46,11 @@ Mac M4 worker (`m4-mlx`) ทำงานด้วย release `f6299fa` และ
 - Poll `/v1/jobs/{job_id}/status` จนเป็น terminal state
 - ตรวจ output manifest
 - ใช้ `ffprobe` ตรวจ codec, resolution, duration และไฟล์ที่มีขนาดมากกว่าศูนย์
+- ตรวจ worker health ให้เป็น `vt_ready=true` และ preferred encoder เป็น `h264_videotoolbox`
 
 การจับเวลาเริ่มหลัง upload เสร็จและเริ่ม render request จึงไม่รวม latency จาก public Gateway, network ภายนอก และ PostgreSQL
 
-## TC01 Results
+## TC01 Results: Baseline ก่อน optimize
 
 ทดสอบซ้ำ 3 รอบด้วย input เดียวกัน:
 
@@ -55,7 +69,7 @@ Mac M4 worker (`m4-mlx`) ทำงานด้วย release `f6299fa` และ
 - Output duration: `10.000` วินาที
 - Output streams: H.264 video และ AAC audio
 
-## TC02 Results
+## TC02 Results: Baseline ก่อน optimize
 
 TC02 สร้าง reframe/chroma matrix จำนวน 21 outputs จาก product เดียว:
 
@@ -96,13 +110,24 @@ TC02 สร้าง reframe/chroma matrix จำนวน 21 outputs จาก 
 - ระหว่างเริ่ม TC02 ครั้งแรก Mac launchd มีช่วง restart overlap ทำให้ connection refused ก่อนเริ่ม render; รอบที่รันหลัง service stable ผ่านครบ 21/21
 - ไม่ควรใช้ตัวเลขนี้เป็น SLA จนกว่าจะทดสอบหลายขนาดไฟล์, codec, audio และ concurrent jobs
 
+## สิ่งที่เปลี่ยนในการ optimize
+
+- แก้ VideoToolbox smoke test จาก invalid `-allow_sw_hw` เป็น `-allow_sw` สำหรับ FFmpeg 8
+- แก้ Apple input acceleration จาก invalid `h264_videotoolbox` decoder เป็น `-hwaccel videotoolbox`
+- ตั้ง M4 CPU budget เป็น `100%`
+- เปิด `V3_TC02_STREAMING=1`, `V3_TC02_PRODUCERS=2`, `V3_TC02_CONSUMERS=3`
+- เพิ่ม `-prio_speed 1` ใน VideoToolbox render command
+- แก้ telemetry ให้แสดง `GPU/VideoToolbox` และรายงานจำนวน producer/consumer จริง
+
 ## Baseline สำหรับรอบถัดไป
 
 ใช้ค่าเหล่านี้เป็น baseline เมื่อเปลี่ยน code, encoder หรือ worker configuration:
 
 ```text
-TC01: 10s input -> 1 output -> average 2.592s -> 3.86x realtime
-TC02: 10s input -> 21 outputs -> 154.805s -> 21/21 valid
+Before: TC01 10s input -> 1 output -> average 2.592s
+Before: TC02 10s input -> 21 outputs -> 154.805s -> 21/21 valid
+Current: TC01 10s input -> 1 output -> 2.147s -> GPU/VideoToolbox
+Current: TC02 10s input -> 21 outputs -> 34.692s -> 21/21 valid -> streaming 2+3
 ```
 
 ควรถือว่า benchmark regression เกิดขึ้นเมื่อ:
