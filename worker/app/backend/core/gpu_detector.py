@@ -190,10 +190,12 @@ def _encoder_smoke_test(encoder: str, ffmpeg_cmd: str = "ffmpeg") -> bool:
     elif encoder == "libx264":
         cmd += ["-preset", "ultrafast"]
     elif encoder in ("h264_videotoolbox", "hevc_videotoolbox"):
-        # VT is bitrate-driven but accepts -q:v as a ceiling hint. We pass a
-        # mid-range q+v so the smoke frame is realistic; the encoder_args_for_preset
-        # path replaces this with a profile-specific q+v at render time.
-        cmd += ["-q:v", "75", "-b:v", "2000k"]
+        # FIX 2026-08-19: Apple Silicon optimizations (M4 Mac mini, etc.)
+        # - Allow hardware fallback (-allow_sw_hw 1) for missing paths
+        # - Priority speed (-prio_speed 1) trades quality for ~2x throughput
+        # - Multi-thread (M4 has 4P+6E cores; VT can use both)
+        # - Force realtime=false (we control timing via -t)
+        cmd += ["-q:v", "75", "-b:v", "2000k", "-prio_speed", "1", "-allow_sw_hw", "1"]
 
     cmd += ["-f", "null", "-"]
 
@@ -269,11 +271,17 @@ def _video_encoder_args(encoder: str) -> List[str]:
     if encoder == "h264_amf":
         return ["-quality", "quality"]
     if encoder == "libx264":
-        return ["-preset", "slow", "-crf", "18"]
+        # v3.PERF (2026-08-18): env-overridable preset for batch throughput.
+        # Default "medium" — 2-3× faster than "slow" with minor quality loss.
+        _libx264_preset = os.environ.get("V3_LIBX264_PRESET", "medium").strip() or "medium"
+        return ["-preset", _libx264_preset, "-crf", "18"]
     # FIX (2026-07-31): VideoToolbox hardware. Default quality=75 is a sensible
     # mid-point; callers override via encoder_args_for_preset() when the
     # user picked a UI preset profile.
     if encoder in ("h264_videotoolbox", "hevc_videotoolbox"):
+        # FIX 2026-08-19: Apple Silicon optimizations — keep -q:v at the
+        # cross-platform default; aside flags are injected at the Python
+        # pipeline layer (build_render_command), not in the encoder preset.
         return ["-q:v", "75"]
     return []
 
@@ -338,7 +346,10 @@ def encoder_args_for_preset(
         if profile == "hq":
             mapped += ["-preanalysis", "1"]
     elif encoder == "libx264":
-        mapped = ["-preset", _X264_PRESET_BY_PROFILE[profile]]
+        # v3.PERF (2026-08-18): env-overridable preset for batch throughput.
+        # Default "medium" — 2-3× faster than "slow" with minor quality loss.
+        _libx264_preset = os.environ.get("V3_LIBX264_PRESET", "medium").strip() or "medium"
+        mapped = ["-preset", _libx264_preset]
     elif encoder in ("h264_videotoolbox", "hevc_videotoolbox"):
         # FIX (2026-07-31): VT has no preset ladder; map UI profile to a -q:v cap.
         mapped = ["-q:v", _VT_QUALITY_BY_PROFILE[profile]]

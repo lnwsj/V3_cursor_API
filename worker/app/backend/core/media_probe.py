@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import os
 import subprocess
+import sys
 import threading
 import time
 from enum import Enum
@@ -467,14 +468,18 @@ def probe_video_codec(ffprobe_cmd: str, path: str) -> str:
 
 
 def input_decoder_args(ffprobe_cmd: str, inputs: List[str]) -> List[str]:
-    """Insert ``-c:v <codec>_cuvid`` BEFORE each ``-i <video>`` in inputs.
+    """Insert hardware-accelerated decoder args BEFORE each ``-i <video>``.
 
-    When ``V3_NVDEC != "1"`` returns ``inputs`` unchanged (no-op). Image
-    inputs (PNG/JPG) are skipped (image2 demuxer handles them). Audio-only
-    inputs (no video stream) are also skipped via the codec probe.
+    Routing:
+    - V3_NVDEC=1 AND non-Apple: ``-c:v <codec>_cuvid`` (NVIDIA NVDEC)
+    - V3_APPLE_HWACCEL=1 AND Apple: ``-c:v <codec>_videotoolbox`` (VideoToolbox)
+    - Default: passthrough (CPU decode, no hwaccel)
+
+    Image inputs (PNG/JPG) and audio-only inputs are skipped.
     """
-    if os.getenv("V3_NVDEC", "").strip() != "1":
+    if os.getenv("V3_NVDEC", "").strip() != "1" and os.getenv("V3_APPLE_HWACCEL", "").strip() != "1":
         return inputs
+    is_apple = sys.platform == "darwin"
     out: List[str] = []
     i = 0
     while i < len(inputs):
@@ -482,10 +487,18 @@ def input_decoder_args(ffprobe_cmd: str, inputs: List[str]) -> List[str]:
         if a == "-i" and i + 1 < len(inputs):
             path = inputs[i + 1]
             codec = probe_video_codec(ffprobe_cmd, path)
-            if codec == "hevc":
-                out += ["-c:v", "hevc_cuvid"]
-            elif codec == "h264":
-                out += ["-c:v", "h264_cuvid"]
+            if is_apple:
+                # FIX 2026-08-19: VideoToolbox hardware (Apple Silicon M1/M2/M4)
+                # decodes h264/hevc on the GPU (free CPU + lower latency).
+                if codec == "hevc":
+                    out += ["-c:v", "hevc_videotoolbox"]
+                elif codec == "h264":
+                    out += ["-c:v", "h264_videotoolbox"]
+            else:
+                if codec == "hevc":
+                    out += ["-c:v", "hevc_cuvid"]
+                elif codec == "h264":
+                    out += ["-c:v", "h264_cuvid"]
             # else: leave alone (image, audio, unsupported codec)
             out.append(a)         # -i
             out.append(path)      # path
