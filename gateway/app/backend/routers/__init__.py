@@ -1,2 +1,2 @@
-"""routers package (Phase 2 refactor) — re-exports APIRouter modules."""
-from . import auth, pages, uploads, users, ws  # noqa: F401
+"""routers package (Phase 2+3 refactor)."""
+from . import auth, cluster, jobs, pages, system, uploads, users, ws  # noqa: F401
