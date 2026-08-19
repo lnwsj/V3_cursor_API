@@ -282,6 +282,28 @@ async def lifespan(_: FastAPI):
 
 app = FastAPI(title="V3_cursor_API Gateway", version=API_VERSION, lifespan=lifespan)
 
+# OpenAPI / Swagger UI (FIX 2026-08-19)
+from fastapi.openapi.docs import get_swagger_ui_html, get_redoc_html
+from fastapi.openapi.utils import get_openapi
+
+@app.get('/docs', include_in_schema=False)
+async def custom_swagger_ui():
+    return get_swagger_ui_html(openapi_url='/openapi.json', title='V3 Cluster API')
+
+@app.get('/redoc', include_in_schema=False)
+async def custom_redoc():
+    return get_redoc_html(openapi_url='/openapi.json', title='V3 Cluster API')
+
+@app.get('/openapi.json', include_in_schema=False)
+async def custom_openapi():
+    return get_openapi(
+        title=app.title,
+        version=app.version,
+        description='V3 Cursor Cluster API - gateway + workers for video chroma-key rendering',
+        routes=app.routes,
+    )
+
+
 # CORS for WebSocket + cross-origin (FIX 2026-08-19): allow all origins for the portal
 app.add_middleware(
     CORSMiddleware,
