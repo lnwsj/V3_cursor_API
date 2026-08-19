@@ -1329,12 +1329,16 @@ def render_tc02_streaming(inputs: PipelineInputs, cb: PipelineCallbacks) -> Pipe
         outputs=final_outputs,
         stages=[reframe_stage, chroma_stage],
         errors=chroma_errors,
-        metadata={"elapsed_sec": time.time() - started, "streaming_2plus2": True},
+        metadata={
+            "elapsed_sec": time.time() - started,
+            "streaming_producers": N_PRODUCERS,
+            "streaming_consumers": N_CONSUMERS,
+        },
     ).finalize(paused=paused, cancel_requested=cancel_requested)
 
     safe_log(
         cb.log_fn,
-        f"[streaming 2+2] done: chroma={len(final_outputs)}/{expected_final} "
+        f"[streaming {N_PRODUCERS}+{N_CONSUMERS}] done: chroma={len(final_outputs)}/{expected_final} "
         f"status={result.status.value} elapsed={time.time() - started:.1f}s",
     )
     if result.is_success:

@@ -280,10 +280,8 @@ def _video_encoder_args(encoder: str) -> List[str]:
     # mid-point; callers override via encoder_args_for_preset() when the
     # user picked a UI preset profile.
     if encoder in ("h264_videotoolbox", "hevc_videotoolbox"):
-        # FIX 2026-08-19: Apple Silicon optimizations — keep -q:v at the
-        # cross-platform default; aside flags are injected at the Python
-        # pipeline layer (build_render_command), not in the encoder preset.
-        return ["-q:v", "75"]
+        # FIX 2026-08-19: prioritize offline encode throughput on Apple Silicon.
+        return ["-q:v", "75", "-prio_speed", "1"]
     return []
 
 

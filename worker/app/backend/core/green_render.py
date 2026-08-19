@@ -1080,7 +1080,12 @@ def render_green(
             effective_encoder = cmd[cmd.index("-c:v") + 1]
         except Exception:
             effective_encoder = "(unknown)"
-    gpu_label = "GPU/NVENC" if effective_encoder in {"h264_nvenc", "hevc_nvenc", "av1_nvenc"} else "CPU/software"
+    if effective_encoder in {"h264_nvenc", "hevc_nvenc", "av1_nvenc"}:
+        gpu_label = "GPU/NVENC"
+    elif effective_encoder in {"h264_videotoolbox", "hevc_videotoolbox"}:
+        gpu_label = "GPU/VideoToolbox"
+    else:
+        gpu_label = "CPU/software"
     log(f"[green] effective video encoder: {effective_encoder} ({gpu_label})")
     filter_complex = cmd[cmd.index("-filter_complex") + 1] if "-filter_complex" in cmd else ""
     log(
