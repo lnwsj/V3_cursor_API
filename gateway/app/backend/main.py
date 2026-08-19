@@ -64,11 +64,8 @@ PUBLIC_API_KEYS = list(
     if item.strip()
 )
 ADMIN_API_KEY = os.getenv("CUTDEE_ADMIN_API_KEY", "")
-SESSION_COOKIE_NAME = "cutdee_session"
-# Session cache: issued API keys from signup/login (FIX 2026-08-19) — populated
-# at runtime so cookie auth can resolve user_id without env var reload.
-_SESSION_KEYS: Dict[str, str] = {}  # api_key → user_id
-DEFAULT_DATA_DIR = Path.home() / ".cache" / "v3-cursor-api" / "gateway"
+# Session cache + cookie name now defined in services.users (Phase 1.2)
+
 DATA_DIR = Path(os.getenv("GATEWAY_DATA_DIR", str(DEFAULT_DATA_DIR)))
 UPLOADS_DIR = DATA_DIR / "uploads"
 OUTPUTS_DIR = DATA_DIR / "outputs"
@@ -76,198 +73,15 @@ DATA_DIR.mkdir(parents=True, exist_ok=True)
 UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
 OUTPUTS_DIR.mkdir(parents=True, exist_ok=True)
 
-# PostgreSQL
-PG_HOST = os.getenv("CUTDEE_PG_HOST", "127.0.0.1")
-PG_PORT = int(os.getenv("CUTDEE_PG_PORT", "6432"))
-PG_NAME = os.getenv("CUTDEE_PG_NAME", "v3_cursor_api")
-PG_USER = os.getenv("CUTDEE_PG_USER", "v3_cursor_api")
-PG_PASS = os.getenv("CUTDEE_PG_PASSWORD", "v3_cursor_api_pwd_2026")
-
-# Workers config (read from file or env)
-WORKERS_FILE = Path(os.getenv("CUTDEE_WORKERS_FILE", DATA_DIR / "workers.json"))
-DEFAULT_WORKERS = [
-    # Will be populated from workers.json if exists
-]
-
-# Request timeout
-WORKER_TIMEOUT = 60.0  # sec
-MAX_LIST_LIMIT = 100
-MAX_UPLOAD_BYTES = max(1, int(os.getenv("GATEWAY_MAX_UPLOAD_BYTES", str(200 * 1024 * 1024))))
-SAFE_OUTPUT_NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,254}$")
-SAFE_FILE_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,160}$")
-TERMINAL_JOB_STATUSES = {"succeeded", "partial", "failed", "cancelled", "paused", "invalid_input"}
-BEARER_SCHEME = HTTPBearer(auto_error=False)
-
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+# PostgreSQL (Phase 1.1 refactor: extracted to services.db)
+from .services.db import (
+    pg_conn as _pg_conn,
+    pg_cursor as _pg_cursor,
+    init_pool,
+    close_pool,
+    init_schema as _init_schema,
 )
-log = logging.getLogger("v3-gateway")
 
-# === PG setup ===
-_JOBS_LOCK = threading.Lock()
-_PG_POOL: Any = None
-_MONITOR_TASKS: Dict[str, asyncio.Task] = {}
-
-
-def _pg_conn():
-    """Get a PG connection (or use the pool if available)."""
-    if psycopg2 is None:
-        raise RuntimeError("psycopg2-binary is required for Gateway database access")
-    if _PG_POOL is not None:
-        return _PG_POOL.getconn()
-    return psycopg2.connect(
-        host=PG_HOST, port=PG_PORT, dbname=PG_NAME, user=PG_USER, password=PG_PASS,
-        cursor_factory=psycopg2.extras.RealDictCursor,
-    )
-
-
-def _pg_release(conn):
-    if _PG_POOL is not None:
-        _PG_POOL.putconn(conn)
-    else:
-        conn.close()
-
-
-def _find_upload_path(file_id: str) -> Path:
-    """Resolve an upload id regardless of its stored media extension."""
-    if not file_id or Path(file_id).name != file_id or not SAFE_FILE_ID.fullmatch(file_id):
-        raise HTTPException(status_code=400, detail="invalid file id")
-    exact = UPLOADS_DIR / file_id
-    if exact.is_file():
-        return exact
-    matches = sorted(path for path in UPLOADS_DIR.glob(f"{file_id}.*") if path.is_file())
-    if matches:
-        return matches[0]
-    raise HTTPException(status_code=400, detail=f"file {file_id} not found")
-
-
-def _upload_suffix(filename: Optional[str], role: str) -> str:
-    suffix = Path(filename or "").suffix.lower()
-    allowed = {".mp4", ".mov", ".mkv", ".avi", ".m4v", ".webm", ".png", ".jpg", ".jpeg", ".zip"}
-    if suffix in allowed:
-        return suffix
-    if role == "cover":
-        return ".png"
-    if role == "product_root":
-        return ".zip"
-    return ".mp4"
-
-
-def _coerce_form_value(value: Any) -> Any:
-    """Convert common multipart scalar values to the types pipelines expect."""
-    if not isinstance(value, str):
-        return value
-    text = value.strip()
-    lowered = text.lower()
-    if lowered == "true":
-        return True
-    if lowered == "false":
-        return False
-    if lowered in {"null", "none"}:
-        return None
-    if text.startswith(("{", "[")):
-        try:
-            return json.loads(text)
-        except json.JSONDecodeError:
-            return value
-    try:
-        return float(text) if "." in text else int(text)
-    except ValueError:
-        return value
-
-
-def _validate_upload_body(body: bytes) -> bytes:
-    if not body:
-        raise HTTPException(status_code=400, detail="empty upload")
-    if len(body) > MAX_UPLOAD_BYTES:
-        raise HTTPException(status_code=413, detail="upload too large")
-    return body
-
-
-def _init_schema():
-    """Create gateway tables + apply migrations."""
-    schema = """
-    CREATE TABLE IF NOT EXISTS v3_jobs (
-        job_id TEXT PRIMARY KEY,
-        user_id TEXT NOT NULL,
-        worker_id TEXT,
-        tc TEXT NOT NULL DEFAULT 'tc01',
-        status TEXT NOT NULL DEFAULT 'queued',
-        progress INT NOT NULL DEFAULT 0,
-        current_step TEXT,
-        reserved_credits INTEGER NOT NULL DEFAULT 0,
-        settled_credits INTEGER NOT NULL DEFAULT 0,
-        product_path TEXT,
-        background_path TEXT,
-        cover_path TEXT,
-        audio_path TEXT,
-        settings JSONB,
-        output_file TEXT,
-        output_size BIGINT,
-        output_files JSONB,
-        log JSONB,
-        result JSONB,
-        error TEXT,
-        created_at DOUBLE PRECISION NOT NULL,
-        started_at DOUBLE PRECISION,
-        finished_at DOUBLE PRECISION
-    );
-    CREATE TABLE IF NOT EXISTS v3_users (
-        user_id TEXT PRIMARY KEY,
-        api_key_hash TEXT NOT NULL,
-        role TEXT NOT NULL DEFAULT 'user',
-        display_name TEXT,
-        monthly_quota INT NOT NULL DEFAULT 100,
-        monthly_used INT NOT NULL DEFAULT 0,
-        api_key_prefix TEXT,
-        created_at DOUBLE PRECISION NOT NULL,
-        last_seen_at DOUBLE PRECISION,
-        last_reset_at DOUBLE PRECISION
-    );
-    CREATE INDEX IF NOT EXISTS idx_v3_users_role ON v3_users(role);
-    CREATE INDEX IF NOT EXISTS idx_v3_jobs_user ON v3_jobs(user_id, created_at DESC);
-    CREATE INDEX IF NOT EXISTS idx_v3_jobs_status ON v3_jobs(status);
-    """
-    migrations = [
-        "ALTER TABLE v3_jobs ADD COLUMN IF NOT EXISTS tc TEXT DEFAULT 'tc01'",
-        "ALTER TABLE v3_jobs ADD COLUMN IF NOT EXISTS progress INT DEFAULT 0",
-        "ALTER TABLE v3_jobs ADD COLUMN IF NOT EXISTS current_step TEXT",
-        "ALTER TABLE v3_jobs ADD COLUMN IF NOT EXISTS priority INT DEFAULT 0",
-        "ALTER TABLE v3_jobs ADD COLUMN IF NOT EXISTS max_retries INT DEFAULT 0",
-        "ALTER TABLE v3_jobs ADD COLUMN IF NOT EXISTS retry_count INT DEFAULT 0",
-        "ALTER TABLE v3_jobs ADD COLUMN IF NOT EXISTS heartbeat_at DOUBLE PRECISION",
-        "ALTER TABLE v3_jobs ADD COLUMN IF NOT EXISTS cover_path TEXT",
-        "ALTER TABLE v3_jobs ADD COLUMN IF NOT EXISTS audio_path TEXT",
-        "ALTER TABLE v3_jobs ADD COLUMN IF NOT EXISTS output_files JSONB",
-        "ALTER TABLE v3_jobs ADD COLUMN IF NOT EXISTS log JSONB",
-        "ALTER TABLE v3_jobs ADD COLUMN IF NOT EXISTS result JSONB",
-        "CREATE INDEX IF NOT EXISTS idx_v3_jobs_tc ON v3_jobs(tc, created_at DESC)",
-        "CREATE INDEX IF NOT EXISTS idx_v3_jobs_priority_status ON v3_jobs(priority DESC, status, created_at)",
-        "CREATE INDEX IF NOT EXISTS idx_v3_jobs_user ON v3_jobs(user_id, created_at DESC)",
-        "CREATE INDEX IF NOT EXISTS idx_v3_jobs_status ON v3_jobs(status)",
-        # END-USER PORTAL (FIX 2026-08-19): email + password auth
-        "ALTER TABLE v3_users ADD COLUMN IF NOT EXISTS email TEXT",
-        "ALTER TABLE v3_users ADD COLUMN IF NOT EXISTS password_hash TEXT",
-        "ALTER TABLE v3_users ADD COLUMN IF NOT EXISTS last_login_at DOUBLE PRECISION",
-        "CREATE UNIQUE INDEX IF NOT EXISTS idx_v3_users_email ON v3_users(lower(email)) WHERE email IS NOT NULL",
-        # USER TIERS (FIX 2026-08-19): free / pro / enterprise
-        "ALTER TABLE v3_users ADD COLUMN IF NOT EXISTS tier TEXT DEFAULT 'free'",
-        "ALTER TABLE v3_users ADD COLUMN IF NOT EXISTS monthly_quota_paid INT DEFAULT 0",
-        "CREATE INDEX IF NOT EXISTS idx_v3_users_tier ON v3_users(tier)",
-        # JOB PRIORITY COLUMN
-        "ALTER TABLE v3_jobs ADD COLUMN IF NOT EXISTS priority INT DEFAULT 0",
-    ]
-    conn = _pg_conn()
-    try:
-        with conn.cursor() as cur:
-            cur.execute(schema)
-            for m in migrations:
-                cur.execute(m)
-        conn.commit()
-        log.info("PG schema initialized + migrations applied")
-    finally:
-        _pg_release(conn)
 
 
 def _init_workers():
@@ -339,229 +153,34 @@ def _bearer_token(authorization: Optional[str]) -> Optional[str]:
     return token.strip()
 
 
-def _user_for_token(token: Optional[str]) -> str:
-    """Resolve API key to a user_id, auto-registering on first use.
-
-    Resolution order (FIX 2026-08-19):
-      1) Session cache (_SESSION_KEYS) — keys issued at signup/login
-      2) Static admin API key from env
-      3) Static public API keys from env (legacy auto-register)
-    """
-    if not token:
-        raise HTTPException(status_code=401, detail="invalid API token")
-    # 1) Session cache (signup/login)
-    if token in _SESSION_KEYS:
-        return _SESSION_KEYS[token]
-    # 2) Admin key
-    if ADMIN_API_KEY and hmac.compare_digest(token, ADMIN_API_KEY):
-        try:
-            conn = _pg_conn()
-            try:
-                with conn.cursor() as cur:
-                    cur.execute(
-                        """
-                        INSERT INTO v3_users (user_id, api_key_hash, role, api_key_prefix, created_at, last_seen_at, last_reset_at, monthly_quota)
-                        VALUES ('admin', %s, 'admin', 'admin...', %s, %s, %s, 999999)
-                        ON CONFLICT (user_id) DO UPDATE SET last_seen_at = EXCLUDED.last_seen_at
-                        """,
-                        (hashlib.sha256(token.encode("utf-8")).hexdigest(), time.time(), time.time(), time.time()),
-                    )
-                conn.commit()
-            finally:
-                _pg_release(conn)
-        except Exception:
-            log.exception("admin user auto-register failed")
-        return "admin"
-    # 3) Public keys from env (legacy)
-    if any(hmac.compare_digest(token, key) for key in PUBLIC_API_KEYS):
-        user_id = f"u_{hashlib.sha256(token.encode('utf-8')).hexdigest()[:12]}"
-        api_key_hash = hashlib.sha256(token.encode("utf-8")).hexdigest()
-        api_key_prefix = token[:11] + "..." if len(token) > 11 else token
-        try:
-            conn = _pg_conn()
-            try:
-                with conn.cursor() as cur:
-                    cur.execute(
-                        """
-                        INSERT INTO v3_users (user_id, api_key_hash, role, api_key_prefix, created_at, last_seen_at, last_reset_at)
-                        VALUES (%s, %s, 'user', %s, %s, %s, %s)
-                        ON CONFLICT (user_id) DO UPDATE SET last_seen_at = EXCLUDED.last_seen_at
-                        """,
-                        (user_id, api_key_hash, api_key_prefix, time.time(), time.time(), time.time()),
-                    )
-                conn.commit()
-            finally:
-                _pg_release(conn)
-        except Exception:
-            log.exception("user auto-register failed for %s", user_id)
-        return user_id
-    raise HTTPException(status_code=401, detail="invalid API token")
-
-
-def _verify_user(
-    authorization: Optional[str] = Header(None),
-    cutdee_session: Optional[str] = Cookie(None, alias=SESSION_COOKIE_NAME),
-    credentials: Optional[HTTPAuthorizationCredentials] = Security(BEARER_SCHEME),
-):
-    """Require a configured bearer token or the short-lived HttpOnly session cookie."""
-    header_value = authorization
-    if not header_value and credentials is not None:
-        header_value = f"Bearer {credentials.credentials}"
-    token = _bearer_token(header_value) if header_value else cutdee_session
-    return _user_for_token(token)
-
-
-def _is_admin(user: str) -> bool:
-    return user == "admin"
-
-
-def _get_user_tier(user: str) -> str:
-    """Get user's subscription tier (free / pro / enterprise)."""
-    try:
-        conn = _pg_conn()
-        try:
-            with conn.cursor() as cur:
-                cur.execute("SELECT tier FROM v3_users WHERE user_id = %s", (user,))
-                row = cur.fetchone()
-                return (row["tier"] if row else None) or "free"
-        finally:
-            _pg_release(conn)
-    except Exception:
-        return "free"
-
-
-def _limit(value: int) -> int:
-    return max(1, min(int(value), MAX_LIST_LIMIT))
-
-
-def _safe_output_name(value: str) -> str:
-    name = Path(value).name
-    if name != value or not SAFE_OUTPUT_NAME.fullmatch(name) or name in {".", ".."}:
-        raise HTTPException(status_code=400, detail="invalid output filename")
-    return name
-
-
-def _output_names(row: Dict[str, Any]) -> List[str]:
-    raw = row.get("output_files") or []
-    if isinstance(raw, str):
-        try:
-            raw = json.loads(raw)
-        except json.JSONDecodeError:
-            raw = []
-    if not isinstance(raw, list):
-        raw = []
-    if not raw and row.get("output_file"):
-        raw = [row["output_file"]]
-    names: List[str] = []
-    for item in raw:
-        raw_name = str(item)
-        if Path(raw_name).name != raw_name:
-            continue
-        try:
-            name = _safe_output_name(raw_name)
-        except HTTPException:
-            continue
-        if name not in names:
-            names.append(name)
-    return names
-
-
-def _normalize_status(value: Any) -> str:
-    status = str(value or "unknown").lower()
-    return {
-        "success": "succeeded",
-        "completed": "succeeded",
-        "done": "succeeded",
-        "canceled": "cancelled",
-        "invalid-input": "invalid_input",
-    }.get(status, status)
-
-
-def _encoder_names(health: Dict[str, Any]) -> List[str]:
-    raw = health.get("encoder")
-    if isinstance(raw, dict):
-        raw = raw.get("available") or raw.get("preferred") or []
-    if isinstance(raw, str):
-        raw = [raw]
-    # Worker health exposes encoder command flags as a nested list next to the
-    # selected encoder.  Keep only top-level string encoder names.
-    names = [item for item in (raw or []) if isinstance(item, str) and item]
-    gpu = health.get("gpu")
-    if isinstance(gpu, dict):
-        names.extend(item for item in (gpu.get("available") or []) if isinstance(item, str) and item)
-    return list(dict.fromkeys(names))
-
-
-@app.post("/api/auth/session")
-async def create_auth_session(
-    response: Response,
-    authorization: Optional[str] = Header(None),
-):
-    """Exchange a valid bearer token for a short-lived HttpOnly media-session cookie."""
-    token = _bearer_token(authorization)
-    user = _user_for_token(token)
-    response.set_cookie(
-        SESSION_COOKIE_NAME,
-        token,
-        max_age=8 * 60 * 60,
-        httponly=True,
-        secure=True,
-        samesite="strict",
-        path="/",
-    )
-    return {"ok": True, "user": user, "expires_in": 8 * 60 * 60}
-
-
-# =====================================================================
-# END-USER PORTAL: signup / login / logout (FIX 2026-08-19)
-# =====================================================================
-
-def _hash_password(password: str) -> str:
-    """Hash a password using PBKDF2-SHA256 (no external deps)."""
-    salt = os.urandom(16)
-    hkdf = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt, 120_000, dklen=32)
-    return "pbkdf2$120000$" + salt.hex() + "$" + hkdf.hex()
-
-
-def _verify_password(password: str, hashed: str) -> bool:
-    """Verify password against PBKDF2 hash."""
-    try:
-        algo, iters_s, salt_hex, key_hex = hashed.split("$")
-        if algo != "pbkdf2":
-            return False
-        iters = int(iters_s)
-        salt = bytes.fromhex(salt_hex)
-        expected = bytes.fromhex(key_hex)
-        candidate = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt, iters, dklen=32)
-        return hmac.compare_digest(candidate, expected)
-    except Exception:
-        return False
-
-
-def _generate_api_key(user_id: str) -> str:
-    """Generate a fresh API key for a user."""
-    return f"cutdee_vdo_{user_id[:8]}_{secrets.token_hex(12)}"
-
-
-def _set_session_cookie(response: Response, token: str) -> None:
-    response.set_cookie(
-        SESSION_COOKIE_NAME,
-        token,
-        max_age=30 * 24 * 60 * 60,  # 30 days
-        httponly=True,
-        secure=True,
-        samesite="lax",
-        path="/",
-    )
-
-
-def _email_normalize(email: str) -> str:
-    return email.strip().lower()
-
-
-def _validate_email(email: str) -> bool:
-    return bool(re.match(r"^[^@\s]+@[^@\s]+\.[^@\s]+$", email))
-
+# User helpers (Phase 1.2 refactor: extracted to services.users)
+from .services.users import (
+    SESSION_KEYS as _SESSION_KEYS,
+    SESSION_COOKIE_NAME as _SESSION_COOKIE_NAME,
+    hash_password as _hash_password,
+    verify_password as _verify_password,
+    generate_api_key as _generate_api_key,
+    set_session_cookie as _set_session_cookie,
+    clear_session_cookie as _clear_session_cookie,
+    email_normalize as _email_normalize,
+    validate_email as _validate_email,
+    resolve_token_to_user as _user_for_token,
+    get_user_tier as _get_user_tier,
+    is_admin as _is_admin,
+    auto_register_admin as _auto_register_admin,
+    auto_register_user as _auto_register_user,
+    session_key_register as _session_key_register,
+    session_key_clear as _session_key_clear,
+    get_user_by_email as _get_user_by_email,
+    get_user_full as _get_user_full,
+    update_user_profile as _update_user_profile,
+    change_password as _change_password,
+    update_last_login as _update_last_login,
+    create_user as _create_user,
+    TIER_PRIORITY as _TIER_PRIORITY,
+)
+from pydantic import BaseModel
+from typing import Optional
 
 class SignupIn(BaseModel):
     email: str
@@ -756,18 +375,22 @@ async def auth_me(user: str = Depends(_verify_user)):
         _pg_release(conn)
 
 
-# === Worker registry ===
-def _load_workers() -> List[Dict[str, Any]]:
-    if not WORKERS_FILE.exists():
-        return []
-    with WORKERS_FILE.open() as f:
-        data = json.load(f)
-    return data.get("workers", [])
+# Worker registry (Phase 1.4 refactor: extracted to services.workers)
+from .services.workers import (
+    load_workers as _load_workers,
+    save_workers as _save_workers,
+    init_workers as _init_workers,
+    add_worker,
+    remove_worker,
+    update_worker,
+    worker_health as _worker_health,
+    fetch_worker_active_jobs as _fetch_worker_active_jobs,
+    probe_all_workers as _probe_all_workers,
+    probe_all_workers_with_inflight as _probe_all_workers_with_inflight,
+    anonymize_worker as _anonymize_worker,
+    encoder_names as _encoder_names,
+)
 
-
-def _save_workers(workers: List[Dict[str, Any]]):
-    with WORKERS_FILE.open("w") as f:
-        json.dump({"workers": workers}, f, indent=2)
 
 
 async def _worker_health(w: Dict[str, Any]) -> Dict[str, Any]:
@@ -850,149 +473,36 @@ def _worker_for_job(row: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     return next((worker for worker in _load_workers() if worker.get("id") == worker_id), None)
 
 
-def _mark_job_failed(job_id: str, message: str) -> None:
-    conn = _pg_conn()
-    try:
-        with conn.cursor() as cur:
-            cur.execute(
-                "UPDATE v3_jobs SET status='failed', error=%s, finished_at=%s "
-                "WHERE job_id=%s AND status NOT IN ('succeeded','partial','failed','cancelled','paused','invalid_input')",
-                (str(message), time.time(), job_id),
-            )
-        conn.commit()
-    finally:
-        _pg_release(conn)
+# Job helpers (Phase 1.3 refactor: extracted to services.jobs)
+from .services.jobs import (
+    TERMINAL_JOB_STATUSES,
+    canonical_status as _canonical_status,
+    insert_job,
+    get_job,
+    get_job_owner,
+    list_jobs,
+    list_user_jobs,
+    list_live_jobs,
+    list_active_for_user,
+    mark_job_failed as _mark_job_failed,
+    mark_job_soft_deleted,
+    get_retry_info,
+    increment_retry,
+    record_worker_status as _record_worker_status,
+    output_names as _output_names,
+)
 
-
-async def _maybe_retry_job(
-    job_id: str,
-    user: str,
-    error_msg: str,
-    tc: str,
-    payload: Optional[Dict[str, Any]],
-    files_for_retry: Optional[Dict[str, str]],
-    priority: int = 0,
-) -> None:
-    """FIX 2026-08-18: background retry logic.
-
-    On dispatch failure, check if retry_count < max_retries. If so, pick a
-    fresh worker and re-dispatch. Otherwise mark as failed.
-    """
-    conn = _pg_conn()
-    try:
-        with conn.cursor() as cur:
-            cur.execute(
-                "SELECT max_retries, retry_count, user_id, tc, settings FROM v3_jobs WHERE job_id=%s",
-                (job_id,))
-            row = cur.fetchone()
-    finally:
-        _pg_release(conn)
-    if not row:
-        return
-    max_retries = int(row["max_retries"] or 0)
-    retry_count = int(row["retry_count"] or 0)
-    if retry_count >= max_retries:
-        # No more retries — mark failed
-        log.warning(f"job={job_id} exhausted {max_retries} retries; marking failed")
-        _mark_job_failed(job_id, f"max_retries exhausted: {error_msg}")
-        return
-    # Pick a new worker (different from last attempt by random tiebreak)
-    workers = _load_workers()
-    new_worker = await _pick_worker(workers, job_priority=priority)
-    if not new_worker:
-        log.warning(f"job={job_id} no worker available for retry")
-        _mark_job_failed(job_id, f"retry failed: no worker: {error_msg}")
-        return
-    # Increment retry_count and re-dispatch
-    conn = _pg_conn()
-    try:
-        with conn.cursor() as cur:
-            cur.execute(
-                "UPDATE v3_jobs SET status='queued', worker_id=%s, retry_count=retry_count+1, "
-                "error=NULL, started_at=NULL, finished_at=NULL WHERE job_id=%s",
-                (new_worker["id"], job_id))
-        conn.commit()
-    finally:
-        _pg_release(conn)
-    log.info(f"job={job_id} retry {retry_count+1}/{max_retries} on {new_worker['id']}")
-    # Dispatch to new worker
-    try:
-        async with httpx.AsyncClient(timeout=WORKER_TIMEOUT * 3) as c:
-            if tc == "tc01":
-                # Original v1 dispatch
-                r = await c.post(
-                    f"{new_worker['url']}/v1/tc01/render/{job_id}",
-                    json=files_for_retry or {},
-                    headers={"X-Cutdee-Internal": INTERNAL_TOKEN},
-                )
-            else:
-                # Modern TC pipeline
-                r = await c.post(
-                    f"{new_worker['url']}/v1/{tc}/render/{job_id}",
-                    json=payload or {},
-                    headers={"X-Cutdee-Internal": INTERNAL_TOKEN},
-                )
-            r.raise_for_status()
-    except Exception as exc:
-        log.error(f"job={job_id} retry {retry_count+1} failed: {exc}")
-        await _maybe_retry_job(job_id, user, str(exc), tc, payload, files_for_retry, priority)
-
-
-def _record_worker_status(job_id: str, data: Dict[str, Any]) -> str:
-    """Persist one canonical Worker status snapshot in PostgreSQL."""
-    status = _canonical_status(data.get("status"))
-    output_files = list(data.get("output_files") or [])
-    output_file = data.get("output_file") or (output_files[0] if output_files else None)
-    if output_file and output_file not in output_files:
-        output_files.insert(0, output_file)
-    logs = data.get("log") or data.get("log_lines") or []
-    result = data.get("result") or data
-    try:
-        progress = max(0, min(100, int(float(data.get("progress", 0) or 0))))
-    except (TypeError, ValueError):
-        progress = 100 if status == "succeeded" else 0
-    if status == "succeeded":
-        progress = 100
-    conn = _pg_conn()
-    try:
-        with conn.cursor() as cur:
-            cur.execute("SELECT status FROM v3_jobs WHERE job_id=%s FOR UPDATE", (job_id,))
-            current_row = cur.fetchone()
-            current_status = _canonical_status(current_row["status"]) if current_row and current_row.get("status") else None
-            if current_status in TERMINAL_JOB_STATUSES and current_status != status:
-                conn.commit()
-                return current_status
-            cur.execute(
-                """UPDATE v3_jobs
-                   SET status=%s, progress=%s, current_step=%s,
-                       output_file=%s, output_size=%s, output_files=%s,
-                       log=%s, result=%s, error=%s,
-                       started_at=COALESCE(%s, started_at),
-                       finished_at=%s
-                 WHERE job_id=%s""",
-                (
-                    status,
-                    progress,
-                    data.get("current_step"),
-                    output_file,
-                    data.get("output_size"),
-                    json.dumps(output_files),
-                    json.dumps(logs),
-                    json.dumps(result),
-                    data.get("error"),
-                    data.get("started_at"),
-                    data.get("finished_at") if status in TERMINAL_JOB_STATUSES else None,
-                    job_id,
-                ),
-            )
-        conn.commit()
-    finally:
-        _pg_release(conn)
-    return status
-
-
-async def _record_worker_status_async(job_id: str, data: Dict[str, Any]) -> str:
+async def _record_worker_status_async(job_id: str, data):
+    """Async wrapper around sync record_worker_status (runs in thread pool)."""
     return await asyncio.to_thread(_record_worker_status, job_id, data)
+# Metrics helpers (Phase 1.5 refactor: extracted to services.metrics)
+from .services.metrics import (
+    job_metrics as _job_metrics,
+    anonymize_workers as _anonymize_workers,
+    public_metrics_view as _public_metrics_view,
+    live_jobs_feed as _live_jobs_feed,
+)
+
 
 
 async def _monitor_worker_job(job_id: str, worker: Dict[str, Any]) -> None:
@@ -1776,127 +1286,8 @@ async def _worker_extended(w: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
-async def _job_metrics(hours: int = 24) -> Dict[str, Any]:
-    """Aggregated metrics from PG: per-TC latency, success rate, throughput."""
-    now = time.time()
-    since = now - hours * 3600
-    conn = _pg_conn()
-    try:
-        with conn.cursor() as cur:
-            # Per-TC stats
-            cur.execute("""
-                SELECT tc,
-                       COUNT(*) AS total,
-                       COUNT(*) FILTER (WHERE status IN ('succeeded','SUCCEEDED')) AS ok,
-                       COUNT(*) FILTER (WHERE status='failed') AS fail,
-                       COUNT(*) FILTER (WHERE status='INVALID_INPUT') AS invalid,
-                       ROUND(AVG(finished_at - started_at) FILTER (WHERE finished_at > started_at AND status IN ('succeeded','SUCCEEDED')))::int AS avg_sec,
-                       ROUND(PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY finished_at - started_at)
-                             FILTER (WHERE finished_at > started_at AND status IN ('succeeded','SUCCEEDED')))::int AS p50_sec,
-                       ROUND(PERCENTILE_CONT(0.95) WITHIN GROUP (ORDER BY finished_at - started_at)
-                             FILTER (WHERE finished_at > started_at AND status IN ('succeeded','SUCCEEDED')))::int AS p95_sec,
-                       ROUND(AVG(output_size))::bigint AS avg_bytes
-                FROM v3_jobs
-                WHERE created_at > %s
-                GROUP BY tc ORDER BY tc
-            """, (since,))
-            tc_stats = []
-            for row in cur.fetchall():
-                tc_stats.append({
-                    "tc": row["tc"], "total": row["total"], "ok": row["ok"],
-                    "fail": row["fail"], "invalid": row["invalid"],
-                    "avg_sec": row["avg_sec"] or 0, "p50_sec": row["p50_sec"] or 0,
-                    "p95_sec": row["p95_sec"] or 0, "avg_bytes": row["avg_bytes"] or 0,
-                    "success_rate": round(100.0 * row["ok"] / max(row["total"], 1), 1),
-                })
-
-            # Per-worker stats
-            cur.execute("""
-                SELECT worker_id,
-                       COUNT(*) AS total,
-                       COUNT(*) FILTER (WHERE status IN ('succeeded','SUCCEEDED')) AS ok,
-                       ROUND(AVG(finished_at - started_at) FILTER (WHERE finished_at > started_at))::int AS avg_sec
-                FROM v3_jobs
-                WHERE created_at > %s AND worker_id IS NOT NULL AND worker_id <> ''
-                GROUP BY worker_id ORDER BY total DESC
-            """, (since,))
-            worker_stats = []
-            for row in cur.fetchall():
-                worker_stats.append({
-                    "worker_id": row["worker_id"], "total": row["total"],
-                    "ok": row["ok"], "avg_sec": row["avg_sec"] or 0,
-                    "success_rate": round(100.0 * row["ok"] / max(row["total"], 1), 1),
-                })
-
-            # Hourly throughput (last 24h)
-            cur.execute("""
-                SELECT
-                    EXTRACT(EPOCH FROM date_trunc('hour', to_timestamp(created_at)))::bigint AS hour_epoch,
-                    COUNT(*) AS n_jobs,
-                    COUNT(*) FILTER (WHERE status IN ('succeeded','SUCCEEDED')) AS n_ok
-                FROM v3_jobs
-                WHERE created_at > %s
-                GROUP BY 1 ORDER BY 1
-            """, (since,))
-            hourly = [{"hour": row["hour_epoch"], "total": row["n_jobs"], "ok": row["n_ok"]} for row in cur.fetchall()]
-
-            # Total summary
-            cur.execute("""
-                SELECT
-                    COUNT(*) AS total,
-                    COUNT(*) FILTER (WHERE status IN ('succeeded','SUCCEEDED')) AS ok,
-                    COUNT(*) FILTER (WHERE status='failed') AS failed,
-                    COUNT(*) FILTER (WHERE status='INVALID_INPUT') AS invalid
-                FROM v3_jobs WHERE created_at > %s
-            """, (since,))
-            row = cur.fetchone()
-            totals = {
-                "total": row["total"], "ok": row["ok"], "failed": row["failed"], "invalid": row["invalid"],
-                "success_rate": round(100.0 * row["ok"] / max(row["total"], 1), 1),
-            }
-    finally:
-        _pg_release(conn)
-    return {
-        "window_hours": hours,
-        "totals": totals,
-        "by_tc": tc_stats,
-        "by_worker": worker_stats,
-        "hourly_throughput": hourly,
-    }
 
 
-async def _live_jobs_feed(limit: int = 50) -> List[Dict[str, Any]]:
-    """Real-time running/queued jobs from PG (joined with worker health)."""
-    conn = _pg_conn()
-    try:
-        with conn.cursor() as cur:
-            cur.execute("""
-                SELECT job_id, user_id, worker_id, tc, status, progress,
-                       settings::text, created_at, started_at, finished_at, error
-                FROM v3_jobs
-                WHERE status IN ('queued','running','paused')
-                ORDER BY created_at DESC LIMIT %s
-            """, (limit,))
-            jobs = []
-            for row in cur.fetchall():
-                jobs.append({
-                    "job_id": row["job_id"],
-                    "user_id": row["user_id"],
-                    "worker_id": row["worker_id"],
-                    "tc": row["tc"],
-                    "status": row["status"],
-                    "progress": float(row["progress"]) if row["progress"] is not None else 0.0,
-                    "created_at": float(row["created_at"]) if row["created_at"] else None,
-                    "started_at": float(row["started_at"]) if row["started_at"] else None,
-                    "elapsed_sec": (
-                        round(time.time() - float(row[8]), 1) if row[8] else
-                        round(time.time() - float(row[7]), 1) if row[7] else 0
-                    ),
-                    "error": row["error"],
-                })
-            return jobs
-    finally:
-        _pg_release(conn)
 
 
 @app.get("/api/cluster/dashboard")
@@ -1975,58 +1366,8 @@ async def cluster_metrics_endpoint(hours: int = 24, _: bool = Depends(_verify_in
 # PUBLIC DASHBOARD (FIX 2026-08-19): no auth, anonymized, no internal URLs
 # =====================================================================
 
-def _anonymize_workers(workers: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-    """Strip URLs/IPs/hostnames/internal IDs. Return only safe public fields."""
-    out = []
-    for i, w in enumerate(workers, start=1):
-        # Map tier to a generic friendly name
-        tier = (w.get("tier") or "low").lower()
-        tier_label = {"low": "Standard", "mid": "Performance", "high": "Compute+GPU"}.get(tier, "Compute")
-        out.append({
-            "name": f"Node-{i}",  # anonymized: Node-1, Node-2, ...
-            "tier": tier_label,
-            "tier_tone": tier,
-            "enabled": w.get("enabled", True),
-            "healthy": w.get("healthy", False),
-            "active_jobs": w.get("active_jobs", 0),
-            "max_concurrent": w.get("max_concurrent", 1),
-            "encoder_kind": (
-                "GPU" if (w.get("encoder") or "").startswith(("h264_nvenc", "hevc_nvenc", "av1_nvenc", "h264_videotoolbox"))
-                else "CPU"
-            ),
-            "last_seen_ago": (
-                int(time.time() - w["last_seen"]) if w.get("last_seen") else None
-            ),
-        })
-    return out
 
 
-def _public_metrics_view(metrics: Dict[str, Any]) -> Dict[str, Any]:
-    """Filter internal metric view → only public-safe aggregates."""
-    # Per-TC stats are OK to expose (no IP/PII)
-    by_tc_public = []
-    for t in metrics.get("by_tc", []):
-        by_tc_public.append({
-            "tc": t["tc"], "total": t["total"], "ok": t["ok"],
-            "fail": t["fail"], "invalid": t["invalid"],
-            "avg_sec": t["avg_sec"], "p50_sec": t["p50_sec"], "p95_sec": t["p95_sec"],
-            "success_rate": t["success_rate"],
-        })
-    # Per-worker stats: keep aggregate only (rename to Node-N, drop worker_id)
-    by_node_public = []
-    for i, w in enumerate(metrics.get("by_worker", []), start=1):
-        by_node_public.append({
-            "node": f"Node-{i}",
-            "total": w["total"], "ok": w["ok"],
-            "avg_sec": w["avg_sec"], "success_rate": w["success_rate"],
-        })
-    return {
-        "window_hours": metrics.get("window_hours", 24),
-        "totals": metrics.get("totals", {}),
-        "by_tc": by_tc_public,
-        "by_node": by_node_public,  # renamed from by_worker
-        "hourly_throughput": metrics.get("hourly_throughput", []),
-    }
 
 
 @app.get("/api/cluster/public")
