@@ -34,8 +34,11 @@ _NO_WINDOW = subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0
 # This is 5-10× faster than libx264 with comparable perceptual quality.
 # We add VideoToolbox to the cascade on darwin only — Windows/Linux cascades
 # remain NVIDIA/Intel/AMD/CPU.
+# FIX (2026-08-19): HEVC is preferred over H.264 on Apple Silicon since
+# both run on the same dedicated hardware block and HEVC's 16x16 CTU
+# compresses better at the same quality for 4K inputs.
 _VT_ENCODERS: List[str] = (
-    ["h264_videotoolbox", "hevc_videotoolbox"] if sys.platform == "darwin" else []
+    ["hevc_videotoolbox", "h264_videotoolbox"] if sys.platform == "darwin" else []
 )
 
 # Default preference order — fastest encoder first.

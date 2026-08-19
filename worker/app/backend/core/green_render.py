@@ -582,6 +582,10 @@ def build_render_command(
         "-threads", str(effective_ffmpeg_threads(chroma_max_parallel)),
         "-filter_threads", str(effective_ffmpeg_threads(chroma_max_parallel)),
         "-filter_complex_threads", str(effective_ffmpeg_threads(chroma_max_parallel)),
+        # FIX (2026-08-19): thread_queue_size for M-series Apple Silicon
+        # speeds up multi-thread ffmpeg by overlapping frame fetch + decode.
+        # 1024 is safe for 16GB RAM; default 8 is too low for 4K HEVC.
+        "-thread_queue_size", "1024",
     ]
     if audio_arg:
         cmd += ["-c:a", "aac", "-b:a", "192k", "-ar", "48000", "-ac", "2"]
