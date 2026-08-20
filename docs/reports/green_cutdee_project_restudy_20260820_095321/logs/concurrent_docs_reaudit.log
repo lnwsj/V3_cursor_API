@@ -1,0 +1,36 @@
+=== concurrent/uncommitted documentation state ===
+## refactor-base
+ M CLAUDE.md
+?? .playwright-mcp/
+?? .ssh/
+?? docs/reports/
+=== files already changed by another process during this run ===
+CLAUDE.md
+=== current residual route/public-surface claims ===
+docs/README_TH.md:21:`refactor-base` ณ 2026-08-20 อยู่ในสถานะ **RELEASE BLOCKED** สำหรับ Gateway เนื่องจาก refactor router ยังมี lifespan, auth, upload และ worker-dispatch wiring ที่ต้องแก้และทำ E2E acceptance ใหม่
+docs/README_TH.md:42:รายงานเก่าควรเก็บเป็น immutable evidence และไม่แก้ผลเดิมทับด้วย runtime รุ่นใหม่ หากข้อสรุปถูก supersede ให้เพิ่ม current-state link แทน
+docs/V3_CURSOR_API_DEEP_DIVE_TH.md:1173:`/v3api/openapi.json` ที่ตรวจล่าสุดระบุ `HTTPBearer` protection สำหรับอย่างน้อย:
+docs/V3_CURSOR_API_USER_GUIDE_TH.md:10:BASE="https://example.invalid/v3api"
+docs/V3_CURSOR_API_USER_GUIDE_TH.md:83:POST /api/{tc}/render
+docs/V3_CURSOR_API_USER_GUIDE_TH.md:120:หมายเหตุ: `/api/{tc}/render` เป็น target contract ของ Gateway รุ่นที่ทำ E2E แล้ว; source `refactor-base` ที่ audit ล่าสุดยังมีเพียง compatibility route `/api/render/{tc}` ซึ่งคืน echo payload และยังไม่ enqueue render จริง
+docs/V3_CURSOR_API_USER_GUIDE_TH.md:207:GET /healthz
+docs/V3_CURSOR_API_USER_GUIDE_TH.md:228:- `/api/v1/jobs` เป็น legacy TC01-style route; ถ้าต้องการ TC02-TC06 ให้ใช้ `/api/{tc}/render`
+CLAUDE.md:116:2. Client posts a job (`POST /api/v1/jobs` or `POST /api/{tc}/render`). Gateway:
+CLAUDE.md:207:- The `api_render_tc` handler at `/api/render/{tc}` and the dynamic `/api/{tc}/render` endpoints both upload files to the worker under the role name. Don't confuse the gateway's filename minting with the worker's — the gateway always uses `.mp4`; the worker uses whatever the gateway sends in `Content-Disposition`.
+README.md:41:> **Current source warning:** `refactor-base / 25e1032` is not a production-ready Gateway release. The extracted Gateway routers still have startup, auth, upload and worker-dispatch blockers. Production currently runs a separate `1.2.0 / f6299fa` snapshot. See the current-state audit before using the examples below as an operational contract.
+README.md:49:- `GET  /healthz` — gateway liveness
+docs/V3_CURSOR_API_OPERATIONS_RUNBOOK_TH.md:5:> **Release gate:** source `refactor-base / 25e1032` ยังห้าม deploy เป็น Gateway production จนกว่า current-state audit จะผ่าน P0 gates. Production Gateway ปัจจุบันยังเป็น `1.2.0 / f6299fa`
+docs/V3_CURSOR_API_OPERATIONS_RUNBOOK_TH.md:136:ห้ามเริ่มขั้นตอน canary หาก source เป็น `refactor-base` และยังไม่ผ่าน P0 ใน current-state audit
+docs/V3_CURSOR_API_CURRENT_STATE_AUDIT_TH.md:13:| Gateway `refactor-base` | **RELEASE BLOCKED** | lifespan, auth, upload และ dispatch wiring ยังไม่ครบ |
+docs/V3_CURSOR_API_CURRENT_STATE_AUDIT_TH.md:67:Current router มี `/api/render/{tc}` ซึ่งอ่าน multipart แล้วคืน echo payload แต่ไม่มี dynamic `/api/{tc}/render` ที่คู่มือบางฉบับระบุ และไม่มี actual enqueue ใน handler นี้
+docs/V3_CURSOR_API_CURRENT_STATE_AUDIT_TH.md:91:| `/api/{tc}/render` | ไม่พบ route ใน current Gateway source | planned/contract target only |
+docs/V3_CURSOR_API_CURRENT_STATE_AUDIT_TH.md:140:| `docs/V3_CURSOR_API_DEEP_DIVE_TH.md` | เพิ่ม current-state banner; คง historical findings ไว้แต่ link มาที่ audit นี้ |
+docs/V3_MAC_M4_SPEED_BENCHMARK_TH.md:53:Current live health ต้องตรวจซ้ำและคาดหวัง `hevc_videotoolbox` ตาม current-state audit
+docs/V3_CURSOR_API_DEVELOPMENT_GUIDE_TH.md:107:ใน source ปัจจุบัน `/api/render/{tc}` ยังเป็น compatibility echo handler และ `/api/{tc}/render` ยังไม่ถูก register; ต้องตรวจ route จาก `openapi.json` และทำ canary ก่อนเขียนตัวอย่างว่าใช้งานได้
+docs/V3_CURSOR_API_DEVELOPMENT_GUIDE_TH.md:115:- `/api/v1/jobs` เป็น legacy TC01-style route; dynamic `/api/{tc}/render` ใช้สำหรับ TC-specific dispatch
+=== current audit coverage gaps ===
+- Current-state audit exists but does not link this 2026-08-20 public API evidence package.
+- Notion-aligned master docs are still absent.
+- Operations/User guides still need the root /healthz HTML versus /v3api/healthz JSON distinction.
+- User guide still labels /api/{tc}/render as target while live UI uses /api/render/<tc>; keep both explicitly scoped.
+- Some M4 claims in current docs are outside this Green Cutdee public probe and need their own evidence pointer.

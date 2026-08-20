@@ -1,0 +1,32 @@
+[deployed frontend mirror]
+/tmp/green-cutdee-fix.eaCmhR/index.html
+  1463-1501 auth/session cookie behavior; token is not retained in localStorage
+  1610-1615 render readiness rules: TC01-04 product+background, TC05 product, TC06 product+background+audio
+  1792-1818 FormData field mapping and POST /api/render/{tc}; response job_id becomes state.jobId
+  1835-1859 HTTP status polling at /api/job/{job_id}
+  1862-1900 WebSocket fallback at /ws/job/{job_id}
+  1903-1936 progress, current_stage, encoder_used, current_step displayed in UI
+  1939-1963 terminal state and showDownload/showThumbnailGallery
+  1965-1987 single output + TC02-06 ZIP download routes
+  1990-2037 per-file thumbnail gallery and per-file download route
+  2071-2086 Open Output -> /outputs/ and API token session flow
+  2579-2610 /api/outputs gallery list and 401 token guard
+  2619-2645 /api/download/{job_id}/{filename} gallery playback
+
+[gateway/app/backend/main.py; local SHA matches production]
+  388-427 live worker health and least-active healthy worker selection
+  624-670 multipart /api/render/{tc}, file-role normalization, gateway upload staging
+  673-723 singular job and thumbnail routes
+  726-800 single-output and download-all compatibility routes
+  1311-1355 authenticated job list/status and worker refresh
+  1417-1533 authenticated output list/download ownership checks and worker proxy
+  1549-1580 V3 job response includes worker_id, encoder_used and output_path
+  1592-1710 current TC dispatcher: v3 job id, PostgreSQL row, upload-to-worker,
+      /v1/{tc}/render/{job_id}, returned worker_id
+
+[worker/app/backend/main.py; local SHA matches production]
+  52-70 worker identity, data directory and bounded executor
+  505-562 /health and capability snapshot including worker_id, GPU and data_dir
+  736-770 /v1/jobs/{job_id}/upload/{role} stores files in worker job directory
+  837-907 pipeline factory, FFmpeg pipeline mapping TC01-TC06, enqueue
+  915-959 status and output file serving from worker job directory

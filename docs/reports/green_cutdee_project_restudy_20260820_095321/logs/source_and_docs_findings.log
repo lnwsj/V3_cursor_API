@@ -1,0 +1,414 @@
+=== gateway lifecycle and route attachment ===
+    40	    psycopg2 = None  # type: ignore[assignment]
+    41	from fastapi import Cookie, FastAPI, Request, HTTPException, UploadFile, File, Form, Header, Depends, Response, Security, WebSocket, WebSocketDisconnect
+    42	from fastapi.middleware.cors import CORSMiddleware
+    43	from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
+    44	from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+    45	# Re-export symbols from core for backward compat
+    46	from .core.helpers import (
+    47	    GATEWAY_PORT, API_VERSION, BUILD_COMMIT, INTERNAL_TOKEN, PUBLIC_API_KEYS,
+    48	    ADMIN_API_KEY, SESSION_COOKIE_NAME, _SESSION_KEYS, DEFAULT_DATA_DIR, DATA_DIR,
+    49	    UPLOADS_DIR, OUTPUTS_DIR, PG_HOST, PG_PORT, PG_NAME, PG_USER, SAFE_OUTPUT_NAME,
+    50	    SAFE_FILE_ID, BEARER_SCHEME, WORKER_TIMEOUT, MAX_LIST_LIMIT, MAX_UPLOAD_BYTES,
+    51	    TERMINAL_JOB_STATUSES, _bearer_token, _user_for_token, _verify_internal,
+    52	    _verify_user, _canonical_status,
+    53	    # Backwards-compat shims (FIX 2026-08-20): re-exported so test_gateway_contract
+    54	    # and external scripts keep working post-router-refactor.
+    55	    _normalize_status, _safe_output_name, _output_names, _coerce_form_value, _find_upload_path,
+    56	)
+    57	from pydantic import BaseModel, Field
+    58	
+    59	# === Config ===
+    60	GATEWAY_PORT = int(os.getenv("GATEWAY_PORT", "8788"))
+    61	API_VERSION = os.getenv("CUTDEE_API_VERSION", "1.2.0")
+    62	BUILD_COMMIT = os.getenv("V3_BUILD_COMMIT", "unknown")
+    63	INTERNAL_TOKEN = os.getenv("CUTDEE_INTERNAL_TOKEN", "")
+    64	PUBLIC_API_KEYS = list(
+    65	    item.strip()
+    66	    for item in os.getenv("CUTDEE_API_KEYS", "").split(",")
+    67	    if item.strip()
+    68	)
+    69	ADMIN_API_KEY = os.getenv("CUTDEE_ADMIN_API_KEY", "")
+    70	# Session cache + cookie name now defined in services.users (Phase 1.2)
+    71	
+    72	DATA_DIR = Path(os.getenv("GATEWAY_DATA_DIR", str(DEFAULT_DATA_DIR)))
+    73	UPLOADS_DIR = DATA_DIR / "uploads"
+    74	OUTPUTS_DIR = DATA_DIR / "outputs"
+    75	DATA_DIR.mkdir(parents=True, exist_ok=True)
+    76	UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
+    77	OUTPUTS_DIR.mkdir(parents=True, exist_ok=True)
+    78	
+    79	# PostgreSQL (Phase 1.1 refactor: extracted to services.db)
+    80	from .services.db import (
+    81	    pg_conn as _pg_conn,
+    82	    pg_cursor as _pg_cursor,
+    83	    init_pool,
+    84	    close_pool,
+    85	    init_schema as _init_schema,
+    86	)
+    87	
+    88	
+    89	
+    90	def _init_workers():
+    91	    """Load workers from workers.json, create default if empty."""
+    92	    if not WORKERS_FILE.exists():
+    93	        # Create default
+    94	        WORKERS_FILE.parent.mkdir(parents=True, exist_ok=True)
+    95	        with WORKERS_FILE.open("w") as f:
+    96	            json.dump({"workers": []}, f, indent=2)
+    97	        log.info(f"created empty {WORKERS_FILE}")
+    98	
+    99	
+   100	# === App ===
+   101	@asynccontextmanager
+   102	async def lifespan(_: FastAPI):
+   103	    _init_schema()
+   104	    _init_workers()
+   105	    await _reconcile_active_jobs()
+   106	    yield
+   107	
+   108	
+   109	app = FastAPI(title="V3_cursor_API Gateway", version=API_VERSION, lifespan=lifespan)
+   110	
+   111	# OpenAPI / Swagger UI (FIX 2026-08-19)
+   112	from fastapi.openapi.docs import get_swagger_ui_html, get_redoc_html
+   113	from fastapi.openapi.utils import get_openapi
+   114	
+   115	@app.get('/docs', include_in_schema=False)
+   140	)
+   141	
+   142	
+   143	
+   144	
+   145	
+   146	# Phase 2: register extracted routers
+   147	from .routers import auth, cluster, jobs, pages, system, uploads, users, ws
+   148	app.include_router(auth.router)
+   149	app.include_router(users.router)
+   150	app.include_router(uploads.router)
+   151	app.include_router(pages.router)
+   152	app.include_router(ws.router)
+   153	app.include_router(jobs.router)
+   154	app.include_router(cluster.router)
+   155	app.include_router(system.router)
+=== jobs router implementation-risk excerpts ===
+    50	    files: Dict[str, List[str]]
+    51	    settings: Dict[str, Any] = Field(default_factory=dict)
+    52	    priority: Optional[int] = None
+    53	    max_retries: int = 0
+    54	    values: Optional[Dict[str, Any]] = None
+    55	
+    56	
+    57	# ---------------------------------------------------------------------------
+    58	# Legacy /api/jobs/* + /api/job/* + /api/render/{tc}
+    59	# ---------------------------------------------------------------------------
+    60	@router.post("/api/render/{tc}", status_code=202)
+    61	async def render_tc(
+    62	    tc: str,
+    63	    request: Request,
+    64	    user: str = Depends(_verify_user),
+    65	):
+    66	    """Legacy multipart submit (kept for V3 frontend compat)."""
+    67	    form = await request.form()
+    68	    file_map = {role: form.get(role) for role in ("product", "background", "cover", "audio", "source", "product_root") if form.get(role)}
+    69	    # Build settings
+    70	    settings = {k: v for k, v in form.items() if k not in file_map and k != "tc"}
+    71	    return {"ok": True, "tc": tc, "files": {k: [v] for k, v in file_map.items() if v}, "settings": settings}
+    72	
+    73	
+    74	@router.get("/api/job/{job_id}")
+    75	async def get_job_alias(job_id: str, user: str = Depends(_verify_user)):
+    76	    """Singular alias for /api/jobs/{job_id} (V3 UI compat)."""
+    77	    return get_job(job_id, user_id=user) or {"ok": False, "error": "not found"}
+    78	
+    79	
+    80	@router.get("/api/v1/jobs/{job_id}/live")
+    81	async def api_v1_job_live(job_id: str, user: str = Depends(_verify_user)):
+    82	    """Live job status with worker info (FIX 2026-08-19)."""
+    83	    job = get_job(job_id, user_id=user)
+    84	    if not job:
+    85	        raise HTTPException(404, "job not found")
+    86	    worker_info = None
+    87	    worker_load = None
+    88	    if job.get("worker_id"):
+    89	        workers = load_workers()
+    90	        for w in workers:
+    91	            if w["id"] == job["worker_id"]:
+    92	                idx = next((i + 1 for i, ww in enumerate(workers) if ww["id"] == job["worker_id"]), 0)
+    93	                worker_info = {"node": f"Node-{idx}", "tier": w.get("tier", "low"), "max_concurrent": w.get("max_concurrent", 1)}
+    94	                worker_load = {"active_jobs": w.get("active_jobs", 0), "max_concurrent": w.get("max_concurrent", 1), "encoder": w.get("encoder")}
+    95	                break
+    96	    avg_seconds = {"tc01": 6, "tc02": 22, "tc03": 8, "tc04": 35, "tc05": 8, "tc06": 25}.get(job.get("tc", ""), 20)
+    97	    progress = float(job.get("progress", 0) or 0)
+    98	    started_at = job.get("started_at")
+    99	    eta_seconds = None
+   100	    if started_at and progress > 5:
+   101	        elapsed = time.time() - float(started_at)
+   102	        eta_seconds = max(0, int((elapsed / progress * (100 - progress))))
+   103	    elif job.get("status") == "queued":
+   104	        eta_seconds = avg_seconds
+   105	    return {**job, "worker": worker_info, "worker_load": worker_load, "eta_seconds": eta_seconds, "avg_seconds": avg_seconds}
+   106	
+   107	
+   108	@router.post("/api/v1/jobs/{job_id}/cancel")
+   109	async def api_v1_job_cancel(job_id: str, user: str = Depends(_verify_user)):
+   110	    """Cancel a job (FIX 2026-08-19)."""
+   111	    job = get_job(job_id, user_id=user)
+   112	    if not job:
+   113	        raise HTTPException(404, "job not found or not owned")
+   114	    mark_job_failed(job_id, "cancelled by user")
+   115	    return {"ok": True, "job_id": job_id, "cancelled": True}
+   116	
+   117	
+   118	@router.post("/api/v1/jobs/{job_id}/retry")
+   119	async def api_v1_job_retry(job_id: str, user: str = Depends(_verify_user)):
+   120	    """Re-submit instructions (FIX 2026-08-19)."""
+   121	    return {
+   122	        "ok": True, "original_job_id": job_id, "new_job_id": None,
+   123	        "tc": "tc02", "message": "Retry requires re-upload via /api/tc*/render",
+   124	    }
+   125	
+   126	
+   127	@router.delete("/api/v1/jobs/{job_id}")
+   128	async def api_v1_job_delete(job_id: str, user: str = Depends(_verify_user)):
+   129	    """Soft-delete (FIX 2026-08-19)."""
+   130	    from app.backend.services.jobs import mark_job_soft_deleted
+   131	    if not mark_job_soft_deleted(job_id, user, admin=False):
+   132	        raise HTTPException(404, "job not found or not owned")
+   133	    return {"ok": True, "job_id": job_id, "deleted": True}
+   134	
+   135	
+   136	@router.post("/api/job/{job_id}/cancel")
+   137	async def api_job_cancel_alias(job_id: str, user: str = Depends(_verify_user)):
+   138	    return await api_v1_job_cancel(job_id, user)
+   139	
+   140	
+   141	@router.get("/api/job/{job_id}/thumbnails")
+   142	async def api_job_thumbnails(job_id: str, user: str = Depends(_verify_user)):
+   143	    return {"ok": True, "job_id": job_id, "thumbnails": []}
+   144	
+   145	
+   146	@router.get("/api/job/{job_id}/output")
+   147	async def api_job_output(job_id: str, user: str = Depends(_verify_user)):
+   148	    return get_job(job_id, user_id=user) or {}
+   149	
+   150	
+   151	@router.get("/api/job/{job_id}/download-all")
+   152	async def api_job_download_all(job_id: str, user: str = Depends(_verify_user)):
+   153	    return {"ok": True, "job_id": job_id, "urls": []}
+   154	
+   155	
+   156	@router.get("/api/jobs/history")
+   157	async def api_jobs_history(user: str = Depends(_verify_user), limit: int = 50):
+   158	    return {"ok": True, "jobs": list_user_jobs(user, min(max(limit, 1), 100))}
+   159	
+   160	
+   161	@router.post("/api/v1/jobs")
+   162	async def create_job(req: CreateJobRequest, user: str = Depends(_verify_user)):
+   163	    """Create a render job and dispatch to a worker (FIX 2026-08-19)."""
+   164	    from app.backend.services.jobs import insert_job
+   165	    from app.backend.services.users import TIER_PRIORITY
+   166	
+   167	    workers = load_workers()
+   168	    worker = await _pick_worker(workers, job_priority=req.priority, required_tc=req.tc)
+   169	    if not worker:
+   170	        raise HTTPException(503, "no_worker_available")
+   171	
+   172	    job_id = f"v3_{int(time.time() * 1000)}_{secrets.token_hex(4)}"
+   173	    t0 = time.time()
+   174	
+   175	    # Auto-derive priority from user tier
+   176	    tier = get_user_tier(user)
+   177	    tier_priority = TIER_PRIORITY.get(tier, 0)
+   178	    explicit_priority = req.priority
+   179	    if explicit_priority is not None and explicit_priority > 0 and _is_admin(user):
+   180	        priority = explicit_priority
+   181	    else:
+   182	        priority = max(tier_priority, explicit_priority or 0)
+   183	
+   184	    insert_job(
+   185	        job_id=job_id, user_id=user, worker_id=worker["id"], tc=req.tc,
+   186	        priority=priority, max_retries=req.max_retries,
+   187	        settings={**(req.settings or {}), **(req.values or {})},
+   188	    )
+   189	    # Forward to worker (omitted for brevity)
+   190	    return {
+   191	        "ok": True, "job_id": job_id, "worker": worker["id"],
+   192	        "tier": tier, "priority": priority, "submitted_at": t0,
+   193	    }
+   194	
+   195	
+   196	@router.get("/api/v1/jobs/{job_id}")
+   197	async def api_v1_get_job(job_id: str, user: str = Depends(_verify_user)):
+   198	    job = get_job(job_id, user_id=user)
+   199	    if not job:
+   200	        raise HTTPException(404, "job not found")
+   201	    return job
+   202	
+   203	
+   204	@router.get("/api/v1/jobs/{job_id}/download/{filename}")
+   205	async def api_v1_download(job_id: str, filename: str, user: str = Depends(_verify_user)):
+   206	    """Download output file (placeholder — real impl lives in main.py)."""
+   207	    raise HTTPException(404, "download proxy not yet extracted")
+   208	
+   209	
+   210	# Legacy V3 compat routes
+   211	@router.post("/api/jobs/upload")
+   212	async def api_jobs_upload(request: Request, user: str = Depends(_verify_user)):
+   213	    return {"ok": True, "files": []}
+   214	
+   215	
+   216	@router.get("/api/jobs/list")
+   217	async def api_jobs_list(user: str = Depends(_verify_user), limit: int = 50):
+   218	    return {"ok": True, "jobs": list_user_jobs(user, min(max(limit, 1), 100))}
+   219	
+   220	
+   221	@router.get("/api/jobs/{job_id}")
+   222	async def api_jobs_get(job_id: str, user: str = Depends(_verify_user)):
+   223	    return get_job(job_id, user_id=user) or {}
+   224	
+   225	
+   226	@router.post("/api/jobs/{job_id}/cancel")
+   227	async def api_jobs_cancel(job_id: str, user: str = Depends(_verify_user)):
+   228	    return await api_v1_job_cancel(job_id, user)
+   229	
+   230	
+   231	@router.post("/api/jobs/{job_id}/pause")
+   232	async def api_jobs_pause(job_id: str, user: str = Depends(_verify_user)):
+   233	    return {"ok": True, "job_id": job_id, "paused": True}
+   234	
+   235	
+   236	@router.post("/api/jobs/{job_id}/resume")
+   237	async def api_jobs_resume(job_id: str, user: str = Depends(_verify_user)):
+   238	    return {"ok": True, "job_id": job_id, "resumed": True}
+=== hidden absolute imports ===
+gateway/app/backend/routers/jobs.py:130:    from app.backend.services.jobs import mark_job_soft_deleted
+gateway/app/backend/routers/jobs.py:164:    from app.backend.services.jobs import insert_job
+gateway/app/backend/routers/jobs.py:165:    from app.backend.services.users import TIER_PRIORITY
+gateway/app/backend/routers/auth.py:161:    with __import__("app.backend.services.db", fromlist=["pg_conn"]).pg_conn() as conn:
+gateway/app/backend/routers/auth.py:229:    with __import__("app.backend.services.db", fromlist=["pg_conn"]).pg_conn() as conn:
+gateway/app/backend/routers/ws.py:65:            from app.backend.services.users import resolve_token_to_user
+gateway/app/backend/routers/system.py:16:    from app.backend.services.jobs import list_user_jobs
+gateway/app/backend/routers/system.py:17:    from app.backend.services.users import get_user_full
+gateway/app/backend/routers/system.py:63:    from app.backend.deps import OUTPUTS_DIR
+gateway/app/backend/routers/system.py:73:    from app.backend.deps import DATA_DIR
+=== current route files ===
+gateway/app/backend/routers/__init__.py
+gateway/app/backend/routers/auth.py
+gateway/app/backend/routers/cluster.py
+gateway/app/backend/routers/jobs.py
+gateway/app/backend/routers/pages.py
+gateway/app/backend/routers/system.py
+gateway/app/backend/routers/uploads.py
+gateway/app/backend/routers/users.py
+gateway/app/backend/routers/ws.py
+gateway/app/backend/services/__init__.py
+gateway/app/backend/services/db.py
+gateway/app/backend/services/jobs.py
+gateway/app/backend/services/metrics.py
+gateway/app/backend/services/users.py
+gateway/app/backend/services/workers.py
+=== docs route/architecture claims ===
+docs/V3_CURSOR_API_USER_GUIDE_TH.md:8:BASE="https://example.invalid/v3api"
+docs/V3_CURSOR_API_USER_GUIDE_TH.md:78:POST /api/{tc}/render
+docs/V3_CURSOR_API_USER_GUIDE_TH.md:164:  "$BASE/api/v1/jobs/$JOB_ID/download/$OUTPUT_FILE" \
+docs/V3_CURSOR_API_USER_GUIDE_TH.md:173:GET /api/job/{job_id}/download-all
+docs/V3_CURSOR_API_USER_GUIDE_TH.md:199:GET /healthz
+docs/V3_CURSOR_API_USER_GUIDE_TH.md:220:- `/api/v1/jobs` เป็น legacy TC01-style route; ถ้าต้องการ TC02-TC06 ให้ใช้ `/api/{tc}/render`
+CLAUDE.md:9:- **Gateway** (`gateway/app/backend/main.py`) — port 8788. Receives uploads, queues jobs in PostgreSQL, dispatches to workers over HTTP.
+CLAUDE.md:10:- **Worker(s)** (`worker/app/backend/main.py`) — port 8789. Run the ffmpeg pipelines and return the rendered MP4.
+CLAUDE.md:14:Live deployment lives behind nginx at `https://green.cutdee.com/v3api/...` (path-based proxy on `127.0.0.1:8788`).
+CLAUDE.md:34:ruff check gateway/app/backend/main.py worker/app/backend/main.py
+CLAUDE.md:35:ruff format --check gateway/app/backend/main.py worker/app/backend/main.py
+CLAUDE.md:41:### Install / deploy (systemd, single host dev)
+CLAUDE.md:49:The installer writes `gateway/.venv` and `worker/.venv`, creates `/etc/v3-cursor-api/{gateway,worker}.env`, generates systemd units, and seeds `/var/lib/v3-cursor-api/gateway/workers.json` with one local worker. Re-running is safe; env files and `workers.json` are only created if missing.
+CLAUDE.md:51:### Run from the repo without systemd
+CLAUDE.md:56:python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
+CLAUDE.md:59:.venv/bin/python -m uvicorn app.backend.main:app --host 0.0.0.0 --port 8788
+CLAUDE.md:63:python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
+CLAUDE.md:67:.venv/bin/python -m uvicorn app.backend.main:app --host 0.0.0.0 --port 8789
+CLAUDE.md:75:curl http://127.0.0.1:8788/healthz
+CLAUDE.md:82:The gateway auto-creates the `v3_jobs` table in schema `v3_jobs` on startup (via `_init_schema` in `gateway/app/backend/main.py`) and applies idempotent migrations. Database is reached through PgBouncer (transaction mode, SCRAM-SHA-256) on the standard `v3_cursor_api` database. Configured by `CUTDEE_PG_*` env vars; defaults assume PgBouncer on `127.0.0.1:6432`.
+CLAUDE.md:97:The gateway has been refactored (Phase 1–3) out of one ~2k-line `main.py` into a layout you should default to:
+CLAUDE.md:99:- `gateway/app/backend/main.py` — wiring only: FastAPI app construction, static-file mount, lifespan startup (`_init_schema`, etc.), and the `if __name__ == "__main__": uvicorn.run(...)` block.
+CLAUDE.md:102:- `gateway/app/backend/routers/` — one file per resource, all wired from `main.py`: `auth.py`, `cluster.py`, `jobs.py`, `pages.py`, `system.py`, `uploads.py`, `users.py`, `ws.py`. New endpoints should land in a router here, not in `main.py`.
+CLAUDE.md:103:- `gateway/app/backend/templates/` — extracted HTML for the page routes (formerly inline in `main.py`).
+CLAUDE.md:107:When asked to "add an endpoint to the gateway", reach for `routers/<topic>.py` + a service in `services/` first; only touch `main.py` for app wiring or new lifespan hooks.
+CLAUDE.md:111:The worker is still a single `worker/app/backend/main.py` (~39KB FastAPI app) on top of the vendored `core/`. New pipeline code goes in `core/pipelines/` (see `worker/app/backend/core/pipelines/tc0N_*.py` and `_common.py`); new settings factories go in `core/contract.py`.
+CLAUDE.md:116:2. Client posts a job (`POST /api/v1/jobs` or `POST /api/{tc}/render`). Gateway:
+CLAUDE.md:123:4. Client downloads the MP4 via `GET /api/v1/jobs/{id}/download/{file}` — gateway proxies from the worker and caches under `OUTPUTS_DIR`.
+CLAUDE.md:132:Public liveness (`/healthz`, `/health`) is unauthenticated.
+CLAUDE.md:177:- **Do not edit `worker/app/backend/core/`** as if it were this repo's source. It is a vendored copy of `V3_cursor/core/`. New pipeline code goes in `worker/app/backend/main.py` or a new sibling module, and settings factories go in `core/contract.py`.
+CLAUDE.md:182:- **Auth header** for gateway↔worker RPC is exactly `X-Cutdee-Internal`, value must match `CUTDEE_INTERNAL_TOKEN` env on both sides. The header is checked by `_verify_internal` in both `main.py` files.
+CLAUDE.md:207:- The `api_render_tc` handler at `/api/render/{tc}` and the dynamic `/api/{tc}/render` endpoints both upload files to the worker under the role name. Don't confuse the gateway's filename minting with the worker's — the gateway always uses `.mp4`; the worker uses whatever the gateway sends in `Content-Disposition`.
+README.md:13:Live: https://green.cutdee.com/v3api/...
+README.md:14:Path-based: /v3api/* → gateway:8788 → worker(s)
+README.md:21:| `gateway/app/backend/main.py` | Receives uploads, queues jobs, dispatches to workers | 8788 |
+README.md:22:| `worker/app/backend/main.py` | Runs ffmpeg green screen render | 8789 |
+README.md:26:| `deploy/systemd/` | Service files (generated by install.sh) | — |
+README.md:38:## Endpoints (all under `/v3api` on green.cutdee.com)
+README.md:42:- `GET  /healthz` — gateway liveness
+README.md:47:- `GET  /api/v1/jobs/{id}/download/{file}` — download output MP4
+README.md:56:- `GET  /v1/jobs/{id}/output?filename=...` — download
+README.md:68:curl http://127.0.0.1:8788/healthz
+README.md:92:location /v3api/ {
+README.md:109:BASE="https://green.cutdee.com/v3api"
+README.md:140:curl -sk -o output.mp4 $BASE/api/v1/jobs/$JOB/download/output_*.mp4 \
+README.md:256:- [ ] WebSocket progress streaming (currently poll `/api/v1/jobs/{id}`)
+README.md:266:- **Path-based `/v3api/` proxy** — preserves existing `green.cutdee.com` AutoMix app on `/`
+docs/README_TH.md:24:  -> Output  : worker local storage, download ผ่าน Gateway
+docs/README_TH.md:29:- Public production มักมี nginx prefix `/v3api`
+docs/README_TH.md:42:- Endpoint และ auth: `gateway/app/backend/main.py`, `worker/app/backend/main.py`
+docs/V3_CURSOR_API_OPERATIONS_RUNBOOK_TH.md:19:curl -fsS "$GATEWAY_BASE/healthz"
+docs/V3_CURSOR_API_OPERATIONS_RUNBOOK_TH.md:46:### Linux systemd
+docs/V3_CURSOR_API_DEVELOPMENT_GUIDE_TH.md:6:gateway/app/backend/main.py       Gateway API, auth, PG, worker dispatch
+docs/V3_CURSOR_API_DEVELOPMENT_GUIDE_TH.md:7:worker/app/backend/main.py        Worker API, queue, job state
+docs/V3_CURSOR_API_DEVELOPMENT_GUIDE_TH.md:31:python3 -m venv gateway/.venv
+docs/V3_CURSOR_API_DEVELOPMENT_GUIDE_TH.md:32:gateway/.venv/bin/pip install -r gateway/requirements.txt
+docs/V3_CURSOR_API_DEVELOPMENT_GUIDE_TH.md:34:python3 -m venv worker/.venv
+docs/V3_CURSOR_API_DEVELOPMENT_GUIDE_TH.md:35:worker/.venv/bin/pip install -r worker/requirements.txt
+docs/V3_CURSOR_API_DEVELOPMENT_GUIDE_TH.md:38:หากใช้ `deploy/install.sh` installer จะตรวจ Python และเตรียม venv ให้ตาม role
+docs/V3_CURSOR_API_DEVELOPMENT_GUIDE_TH.md:49:worker/.venv/bin/python -m uvicorn app.backend.main:app \
+docs/V3_CURSOR_API_DEVELOPMENT_GUIDE_TH.md:56:gateway/.venv/bin/python -m uvicorn app.backend.main:app \
+docs/V3_CURSOR_API_DEVELOPMENT_GUIDE_TH.md:63:curl -fsS http://127.0.0.1:8788/healthz
+docs/V3_CURSOR_API_DEVELOPMENT_GUIDE_TH.md:105:- `/api/v1/jobs` เป็น legacy TC01-style route; dynamic `/api/{tc}/render` ใช้สำหรับ TC-specific dispatch
+docs/V3_CURSOR_API_DEEP_DIVE_TH.md:72:- Worker live smoke: `/health`, `/v1/capabilities`, `/openapi.json` ผ่านบน port ชั่วคราว
+docs/V3_CURSOR_API_DEEP_DIVE_TH.md:75:- Production smoke ผ่าน `/v3api/healthz`, `/v3api/api/version` และ `/v3api/api/cluster/health`
+docs/V3_CURSOR_API_DEEP_DIVE_TH.md:85:| SOURCE | `gateway/app/backend/main.py` | Gateway ที่อยู่ใน working tree |
+docs/V3_CURSOR_API_DEEP_DIVE_TH.md:86:| SOURCE | `worker/app/backend/main.py` | Worker ที่อยู่ใน working tree |
+docs/V3_CURSOR_API_DEEP_DIVE_TH.md:88:| DEPLOY | `deploy/install.sh` | วิธีติดตั้ง systemd, venv, data directory และ tunnel |
+docs/V3_CURSOR_API_DEEP_DIVE_TH.md:115:- `gateway/app/backend/main.py`
+docs/V3_CURSOR_API_DEEP_DIVE_TH.md:134:│   ├── app/backend/main.py
+docs/V3_CURSOR_API_DEEP_DIVE_TH.md:137:│   ├── app/backend/main.py
+docs/V3_CURSOR_API_DEEP_DIVE_TH.md:170:โค้ดที่ Worker ใช้จริงผ่าน `worker/app/backend/main.py` คือ:
+docs/V3_CURSOR_API_DEEP_DIVE_TH.md:192:| `deploy/install.sh` | ติดตั้ง venv, systemd และ data dirs | ไม่ใช่ service |
+docs/V3_CURSOR_API_DEEP_DIVE_TH.md:227:Nginx /v3api/
+docs/V3_CURSOR_API_DEEP_DIVE_TH.md:258:13. Gateway proxy download จาก worker และส่งกลับ client
+docs/V3_CURSOR_API_DEEP_DIVE_TH.md:279:| systemd/launchd active | process หลักยังอยู่ |
+docs/V3_CURSOR_API_DEEP_DIVE_TH.md:291:ไฟล์หลัก: `gateway/app/backend/main.py`
+docs/V3_CURSOR_API_DEEP_DIVE_TH.md:313:| GET | `/healthz` | Gateway liveness | ไม่ควรเรียก worker หนัก |
+docs/V3_CURSOR_API_DEEP_DIVE_TH.md:329:| GET | `/api/v1/jobs/{id}/download/{filename}` | download ผ่าน worker |
+docs/V3_CURSOR_API_DEEP_DIVE_TH.md:342:| GET | `/api/job/{id}/download-all` | ZIP output ทั้ง job ใน working tree ใหม่ |
+docs/V3_CURSOR_API_DEEP_DIVE_TH.md:348:| GET | `/api/download/{path}` | authenticated output proxy |
+docs/V3_CURSOR_API_DEEP_DIVE_TH.md:436:ไฟล์หลัก: `worker/app/backend/main.py`
+docs/V3_CURSOR_API_DEEP_DIVE_TH.md:504:- endpoint download เดิมเคย whitelist เฉพาะ `output_`
+docs/V3_CURSOR_API_DEEP_DIVE_TH.md:780:- final ชื่อ `batch_*.mp4` ไม่ตรง download whitelist เดิม
+docs/V3_CURSOR_API_DEEP_DIVE_TH.md:965:| Mac M4 | `ea2b980` | dirty `worker/main.py` และ backup files |
+docs/V3_CURSOR_API_DEEP_DIVE_TH.md:970:- output naming และ download behavior ต่างกัน
+docs/V3_CURSOR_API_DEEP_DIVE_TH.md:976:### P0: Output publication/download contract ไม่ครบ
+docs/V3_CURSOR_API_DEEP_DIVE_TH.md:982:- Gateway download alias เคยส่ง job id `_`
+docs/V3_CURSOR_API_DEEP_DIVE_TH.md:1171:`/v3api/openapi.json` ที่ตรวจล่าสุดระบุ `HTTPBearer` protection สำหรับอย่างน้อย:
+docs/V3_CURSOR_API_DEEP_DIVE_TH.md:1204:6. สร้าง gateway/worker venv
+docs/V3_CURSOR_API_DEEP_DIVE_TH.md:1207:9. สร้าง systemd units
+docs/V3_CURSOR_API_DEEP_DIVE_TH.md:1217:- gateway และ worker venv อยู่ใน repository
+docs/V3_CURSOR_API_DEEP_DIVE_TH.md:1218:- systemd service ชี้ working tree โดยตรง ไม่ใช่ immutable release
+docs/V3_CURSOR_API_DEEP_DIVE_TH.md:1341:- แก้ gateway download ให้ใช้ job id จริง
+docs/V3_CURSOR_API_DEEP_DIVE_TH.md:1386:- output naming/download tests
+docs/V3_CURSOR_API_DEEP_DIVE_TH.md:1407:- monitor health/status/download
+docs/V3_CURSOR_API_DEEP_DIVE_TH.md:1416:- output download ผ่าน
+docs/V3_CURSOR_API_DEEP_DIVE_TH.md:1434:- status/output/download ตรงกันทุก TC
+docs/V3_CURSOR_API_DEEP_DIVE_TH.md:1443:| TC02 | product + background + compositions | 7 lenses x compositions -> chroma | 7/14/21 per product | task count, final count, order, download |
+docs/V3_CURSOR_API_DEEP_DIVE_TH.md:1488:curl -sS http://127.0.0.1:8788/healthz
+docs/V3_CURSOR_API_DEEP_DIVE_TH.md:1499:curl -sS --max-time 15 http://<worker-or-tunnel>/openapi.json
+docs/V3_CURSOR_API_DEEP_DIVE_TH.md:1563:- Upload, render, poll, cancel และ download ทำงานเป็น flow เดียว
+docs/V3_CURSOR_API_DEEP_DIVE_TH.md:1585:- output download ผ่านทุก naming scheme

@@ -1,0 +1,47 @@
+{
+  "captured_state": "final closeout snapshot used for report",
+  "sha256": "0f8781ea5d19b77c70d03a86fccfa2f921e390691338e424db2d2eadb199918c",
+  "path": "/var/lib/v3-cursor-api/gateway/workers.json",
+  "workers": [
+    {
+      "id": "i9-64gb-cpu-01",
+      "name": "sj88-i9-64gb (i9-12900K 24C 62GB, CPU)",
+      "url": "http://127.0.0.1:8789",
+      "tier": "high",
+      "max_concurrent": 2,
+      "enabled": true
+    },
+    {
+      "id": "sj88-rtx5060ti-01",
+      "name": "sj88-rtx5060ti-01 (RTX 5060 Ti 16GB + AMD 5950X 32C)",
+      "url": "http://110.164.146.205:8789",
+      "tier": "mid",
+      "max_concurrent": 2,
+      "enabled": false
+    },
+    {
+      "id": "m4-mlx",
+      "name": "Mac mini M4 (MLX + Apple Silicon, via hub:55520)",
+      "url": "http://103.253.73.29:55520",
+      "tier": "mid",
+      "max_concurrent": 2,
+      "enabled": true
+    },
+    {
+      "id": "sj88ai-rtx2050-01",
+      "name": "sj88ai (RTX 2050 4GB, NVENC, via hub:55522)",
+      "url": "http://103.253.73.29:55522",
+      "tier": "low",
+      "max_concurrent": 1,
+      "enabled": true
+    },
+    {
+      "id": "sjnb3050ti-rtx3050",
+      "name": "sjnb3050ti (RTX 3050 4GB, Linux Mint, Tailscale tunnel)",
+      "url": "http://103.253.73.29:55523",
+      "tier": "low",
+      "max_concurrent": 1,
+      "enabled": true
+    }
+  ]
+}

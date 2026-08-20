@@ -1,0 +1,13 @@
+Study: green.cutdee.com network and TLS evidence
+Mode: read-only DNS, TCP/HTTP(S), certificate and direct-origin probes
+
+Observed:
+- DNS A: 104.21.64.128, 172.67.150.217
+- DNS AAAA: Cloudflare address records
+- public HTTPS response: HTTP 200
+- public HTTP response: HTTP 301 to HTTPS
+- public certificate: CN=cutdee.com; SAN includes *.cutdee.com and cutdee.com; Let's Encrypt YE1; valid through 2026-10-13
+- direct-origin certificate: CN=green.cutdee.com; valid through 2026-10-28
+- direct-origin HTTPS response for green.cutdee.com: HTTP 200
+
+The public path is Cloudflare-fronted. Direct-origin checks were made with the origin address and SNI/Host resolution; no secret material was recorded.

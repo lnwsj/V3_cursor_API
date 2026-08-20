@@ -1,0 +1,26 @@
+Study: security and exposure evidence
+Mode: read-only source/config/public GET inspection; no exploit or mutation
+
+Observed source/config:
+- gateway /opt/v3-cursor-api/gateway/app/backend/main.py:163-177 defines internal/user checks; missing Authorization falls back to anonymous user.
+- main.py:237-363 exposes /api/render/{tc} without a user dependency.
+- main.py:868-960 exposes upload, job-list, job-control and outputs routes without a user dependency.
+- main.py:962 onward exposes download route without a user dependency.
+- public OpenAPI had no global security scheme and no selected route security declaration.
+
+Observed public metadata:
+- unauthenticated health/cluster responses exposed worker IDs, internal URLs, encoder capabilities, health state and system metrics.
+- outputs endpoint exposed job/file metadata and returned 100 records.
+
+Host perimeter:
+- ufw was not installed
+- nftables INPUT policy: accept
+- iptables INPUT/FORWARD/OUTPUT policies: ACCEPT
+- many listeners bound to 0.0.0.0/[::] on the co-hosted server
+
+Headers and file probes:
+- tested responses did not show HSTS, CSP, X-Frame-Options, X-Content-Type-Options or Referrer-Policy headers
+- /.git/config, /.env, /old/.git/config and /old/.env returned UI fallback in current direct checks; no raw secret file was confirmed
+- detached legacy log contained historical scanner requests, which is operational evidence, not proof of current raw-file exposure
+
+Classification: critical findings requiring remediation before production acceptance. No exploit was attempted and no secret was copied into this artifact.

@@ -1,0 +1,8 @@
+AI Full Dev logging:
+- Preflight POST /api/activities -> HTTP 201, id=12067.
+- First during attempt -> HTTP 400, response: Field 'title' is required. Not counted as success.
+- Second during attempt with object evidence -> HTTP 500 HTML error. Not counted as success.
+- Corrected during POST with title and string evidence -> HTTP 201, id=12069, ok=true.
+- Closeout POST -> HTTP 201, id=12070, ok=true.
+- PATCH /api/activities/12069/status with status=done -> HTTP 200, ok=true.
+- No secret token is stored in this log.

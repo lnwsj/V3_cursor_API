@@ -1,0 +1,28 @@
+Study scope: green.cutdee.com production, read-only.
+Observed at: 2026-08-18 Asia/Bangkok; local source and deployed hashes were compared.
+
+gateway/app/backend/main.py
+  local  = 461c0203739cc15c276f24dc3416e7c2ea8cfb0e5a0a9cb871b20b67b258d651
+  remote = 461c0203739cc15c276f24dc3416e7c2ea8cfb0e5a0a9cb871b20b67b258d651
+worker/app/backend/main.py
+  local  = ef91f59fbc568e0760ba2139a4093aca24d416093940a9f8fe35a7d1f6dc699f
+  remote = ef91f59fbc568e0760ba2139a4093aca24d416093940a9f8fe35a7d1f6dc699f
+/var/www/green/v3/index.html
+  fetched mirror = 15730f4dbb9d423425210670e74b194e99a3d0f707485887f1799550455b237d
+  remote         = 15730f4dbb9d423425210670e74b194e99a3d0f707485887f1799550455b237d
+/var/www/green/v3/js/api.js
+  fetched mirror = c1f49d325f6019d7e990468db0f26aec384b20d73a35aafdc2c0a53713b5961c
+  remote         = c1f49d325f6019d7e990468db0f26aec384b20d73a35aafdc2c0a53713b5961c
+/etc/nginx/sites-available/green.cutdee.com.conf
+  remote = cdf28a50f0917bf8b97279c7083a8c7b05fa9d34b59a433c20467633357c3ec0
+
+The frontend mirror is /tmp/green-cutdee-fix.eaCmhR/index.html and api.js.
+It is used only as a line-addressable copy because its SHA-256 matches the
+deployed static files.
+
+Runtime drift observed during the same study:
+  initial workers.json snapshot hash = af1f820e3806b2ec9afc312607af0cdcec8c1ba73258cc61883071cecc29583c
+  intermediate workers.json snapshot hash = 22bcdec00d18361697a4199e4cff793379f8b5e28176c9c3fe837e3adde97ace
+  final workers.json snapshot hash        = 0f8781ea5d19b77c70d03a86fccfa2f921e390691338e424db2d2eadb199918c
+The final closeout snapshot is the source of truth for the report; earlier
+observations are explicitly labelled as runtime drift, not merged silently.

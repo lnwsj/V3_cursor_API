@@ -1,0 +1,48 @@
+[nginx]
+green.cutdee.com / -> /var/www/green/v3
+green.cutdee.com /api/ -> http://127.0.0.1:8788/api/
+green.cutdee.com /v3api/ -> http://127.0.0.1:8788/
+green.cutdee.com /old/ -> HTTP 410
+client_max_body_size=200m
+proxy_read_timeout=600s
+
+[gateway systemd]
+service=v3-cursor-api-gateway.service
+state=active
+working_directory=/opt/v3-cursor-api/gateway
+exec=/opt/v3-cursor-api/gateway/.venv/bin/python3 -m uvicorn app.backend.main:app --host 127.0.0.1 --port 8788
+api_version=1.2.0
+build_commit=f6299fa
+
+[worker systemd on dedicated server]
+service=v3-cursor-api-worker.service
+state=active
+working_directory=/opt/v3-cursor-api/worker
+exec=/opt/v3-cursor-api/worker/.venv/bin/python3 -m uvicorn app.backend.main:app --host 127.0.0.1 --port 8789
+worker_env_id=server-cpu-01
+worker_data_dir=/var/lib/v3-cursor-api/worker
+worker_health_encoder=libx264
+worker_health_gpu_available=libx264 only
+worker_health_nvenc_ready=false
+worker_health_disk_free_gb=400.63
+
+[latest gateway health]
+status=ok
+total_workers=4
+healthy_workers=3
+configured_workers=5
+disabled_workers=1
+recommended_encoder=h264_nvenc
+
+[direct worker probes]
+110.164.146.205:8789/health = HTTP 200, worker_id=sj88-rtx5060ti-01, h264_nvenc ready; registry disabled at final snapshot
+103.253.73.29:55520/health = HTTP 200, worker_id=m4-mlx, h264_videotoolbox ready
+103.253.73.29:55522/health = no response during final direct probe; registry enabled but unhealthy
+103.253.73.29:55523/health = HTTP 200, worker_id=sjnb3050ti-rtx3050, h264_nvenc ready
+103.253.75.161:8789/health = not public; loopback probe on server returned worker_id=server-cpu-01
+
+Important identity note:
+The registry label i9-64gb-cpu-01 maps to the dedicated server loopback URL,
+while the worker process self-reports worker_id=server-cpu-01. The gateway
+persists the registry id in v3_jobs and the worker reports its own id in status.
+Do not treat these two labels as identical without correlating both records.

@@ -1,0 +1,13 @@
+=== full unit suite repeat after lifecycle recheck ===
+/Users/sj88/Documents/codex/V3_cursor_API/.venv/lib/python3.9/site-packages/pytest_asyncio/plugin.py:208: PytestDeprecationWarning: The configuration option "asyncio_default_fixture_loop_scope" is unset.
+The event loop scope for asynchronous fixtures will default to the fixture caching scope. Future versions of pytest-asyncio will default the loop scope for asynchronous fixtures to function scope. Set the default fixture loop scope explicitly in order to avoid unexpected behavior in the future. Valid fixture loop scopes are: "function", "class", "module", "package", "session"
+
+  warnings.warn(PytestDeprecationWarning(_DEFAULT_FIXTURE_LOOP_SCOPE_UNSET))
+.............................................                            [100%]
+=============================== warnings summary ===============================
+gateway/app/backend/routers/uploads.py:44
+  /Users/sj88/Documents/codex/V3_cursor_API/gateway/app/backend/routers/uploads.py:44: DeprecationWarning: `regex` has been deprecated, please use `pattern` instead
+    role: str = PathParam(..., regex="^(product|background|cover|audio|source|product_root)$"),
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+pytest_repeat_exit=0

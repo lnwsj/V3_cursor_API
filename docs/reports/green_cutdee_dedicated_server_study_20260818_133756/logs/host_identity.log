@@ -1,0 +1,19 @@
+Study: green.cutdee.com Dedicated Server
+Date: 2026-08-18 Asia/Bangkok
+Mode: read-only SSH inspection; credentials and environment secrets redacted
+
+Observed host identity:
+- hostname: server
+- OS: Ubuntu 24.04.4 LTS
+- kernel: Linux 6.8.0-107-generic x86_64
+- interface: enp2s0; origin address 103.253.75.161/25; gateway 103.253.75.129
+- CPU model: 12th Gen Intel(R) Core(TM) i9-12900K
+- logical CPUs: 24
+- installed memory: approximately 64 GB; OS report approximately 62 GiB
+- GPU: Intel AlderLake-S GT1 integrated GPU only; no discrete NVIDIA GPU detected
+- SSD: WDC WDS100T2B0C-00PXH0, 931.5G
+- root filesystem: 914G; 474G used; 402G available; 55%
+- swap: 8.0GiB total; approximately 5.6GiB used at probe
+- first load sample: 9.79 9.96 10.02
+
+Evidence source: read-only hostname, uname, lscpu, /proc/meminfo, lspci, lsblk, df, ip and uptime probes on the supplied dedicated host.

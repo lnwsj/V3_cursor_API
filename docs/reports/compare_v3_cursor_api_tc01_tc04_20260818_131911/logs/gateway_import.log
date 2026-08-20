@@ -1,0 +1,4 @@
+COMMAND=import gateway.app.backend.main with isolated temporary GATEWAY_DATA_DIR
+RESULT=BLOCKED
+ERROR=ModuleNotFoundError: No module named 'psycopg2'
+NOTE=No live API request was sent after import failure.

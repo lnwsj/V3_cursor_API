@@ -1,0 +1,24 @@
+Study: green.cutdee.com service RCA
+Mode: read-only systemd, process, cgroup, journal and local HTTP inspection
+
+V3 services:
+- v3-cursor-api-gateway.service: enabled, active/running, port 8788, /opt/v3-cursor-api/gateway
+- v3-cursor-api-worker.service: enabled, active/running, port 8789, /opt/v3-cursor-api/worker
+
+Legacy service:
+- unit: sj88-green-cutdee.service
+- intended command: /opt/green.cutdee.com/runtime/venv/bin/python -m uvicorn app.main:app --host 127.0.0.1 --port 21002
+- observed state: enabled, activating, auto-restart, MainPID=0
+- observed restart counter: over 310,000 and increasing between probes
+- journal exception: RuntimeError: Migration checksum mismatch for phase2_user_system_v1
+- database checksum: daec5c01530634ad71678c702a478e599b822149dfa495202e6429baa0bcce49
+- code checksum: 730afc7827880aa226bdd33415b62f9b4873439bb091f192ee7cbb3c6cca4281
+
+Separate runtime:
+- port 21002 had PID 2321697 with parent 2321696, user root
+- start observed: 2026-08-05 12:28:47 UTC
+- cgroup: /user.slice/user-0.slice/session-810635.scope
+- cwd: /opt/green.cutdee.com/WebAppCodex/backend
+- detached runtime log: /tmp/green.log
+
+Interpretation: /old/health HTTP 200 is not systemd service proof. It is consistent with the detached process, while the intended unit remains in checksum-failure restart-loop. No process was stopped or restarted.

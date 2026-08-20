@@ -1,0 +1,7 @@
+AI Full Dev evidence log (secret redacted)
+project=greenpc-v3-cursor
+preflight_activity_id=12057 POST /api/activities HTTP 201
+during_analysis_activity_id=12060 POST /api/activities HTTP 201
+closeout_activity_id=12061 POST /api/activities HTTP 201 status=completed_with_boundary
+preflight_status_patch requested=completed_with_boundary HTTP 400
+preflight_status_patch corrected=blocked HTTP 200

@@ -1,0 +1,33 @@
+=== sensitive configuration references (values redacted) ===
+CLAUDE.md:57:CUTDEE_INTERNAL_TOKEN=<REDACTED>
+CLAUDE.md:64:CUTDEE_INTERNAL_TOKEN=<REDACTED>
+CLAUDE.md:130:- **`X-Cutdee-Internal: <token>`** for gateway↔worker RPC and cluster admin endpoints (`/api/cluster/workers`, `/v1/jobs/...`). Token comes from `CUTDEE_INTERNAL_TOKEN` and **must match** between gateway and every worker.
+CLAUDE.md:182:- **Auth header** for gateway↔worker RPC is exactly `X-Cutdee-Internal`, value must match `CUTDEE_INTERNAL_TOKEN` env on both sides. The header is checked by `_verify_internal` in both `main.py` files.
+CLAUDE.md:205:- `CUTDEE_INTERNAL_TOKEN` defaults to `dev-internal-token-change-me` in **both** processes; if you forget to set it on either side, internal RPC silently 401s.
+README.md:84:  -H "X-Cutdee-Internal: $CUTDEE_INTERNAL_TOKEN"
+README.md:163:CUTDEE_INTERNAL_TOKEN=<REDACTED>
+README.md:164:CUTDEE_API_KEYS=<REDACTED>
+README.md:165:CUTDEE_ADMIN_API_KEY=<REDACTED>
+README.md:173:CUTDEE_PG_PASSWORD=<REDACTED>
+README.md:178:CUTDEE_INTERNAL_TOKEN=<REDACTED>
+README.md:204:  -H "X-Cutdee-Internal: $CUTDEE_INTERNAL_TOKEN"
+deploy/install.sh:14:INTERNAL_TOKEN="${CUTDEE_INTERNAL_TOKEN:-}"
+deploy/install.sh:19:            existing_token="$(grep '^CUTDEE_INTERNAL_TOKEN=<REDACTED>
+deploy/install.sh:174:CUTDEE_INTERNAL_TOKEN=<REDACTED>
+deploy/install.sh:175:CUTDEE_API_KEYS=<REDACTED>
+deploy/install.sh:176:CUTDEE_ADMIN_API_KEY=<REDACTED>
+deploy/install.sh:185:CUTDEE_PG_PASSWORD=<REDACTED>
+deploy/install.sh:242:CUTDEE_INTERNAL_TOKEN=<REDACTED>
+gateway/app/backend/core/helpers.py:27:INTERNAL_TOKEN = os.getenv("CUTDEE_INTERNAL_TOKEN", "")
+gateway/app/backend/core/helpers.py:29:    item.strip() for item in os.getenv("CUTDEE_API_KEYS", "").split(",") if item.strip()
+gateway/app/backend/core/helpers.py:31:ADMIN_API_KEY = os.getenv("CUTDEE_ADMIN_API_KEY", "")
+gateway/app/backend/main.py:63:INTERNAL_TOKEN = os.getenv("CUTDEE_INTERNAL_TOKEN", "")
+gateway/app/backend/main.py:66:    for item in os.getenv("CUTDEE_API_KEYS", "").split(",")
+gateway/app/backend/main.py:69:ADMIN_API_KEY = os.getenv("CUTDEE_ADMIN_API_KEY", "")
+gateway/app/backend/deps.py:40:ADMIN_API_KEY = os.getenv("CUTDEE_ADMIN_API_KEY", "")
+gateway/app/backend/deps.py:41:INTERNAL_TOKEN = os.getenv("CUTDEE_INTERNAL_TOKEN", "dev-internal-token-change-me")
+gateway/app/backend/deps.py:44:    for item in os.getenv("CUTDEE_API_KEYS", "").split(",")
+worker/app/backend/main.py:56:INTERNAL_TOKEN = os.getenv("CUTDEE_INTERNAL_TOKEN", "")
+gateway/app/backend/services/db.py:20:PG_PASS = os.getenv("CUTDEE_PG_PASSWORD", "v3_cursor_api_pwd_2026")
+=== ignore rules relevant to env/secrets ===
+.gitignore:7:.env

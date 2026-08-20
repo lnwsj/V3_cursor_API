@@ -1,0 +1,9 @@
+Public API probes captured 2026-08-18 Asia/Bangkok:
+- GET https://green.cutdee.com/api/health -> HTTP 200, total 0.906579s; status=ok; enabled healthy workers=4/4; configured=5; disabled=1; recommended=h264_nvenc; disk_free=401.7GB.
+- GET https://green.cutdee.com/api/outputs without Authorization -> HTTP 401, total 0.093359s; body detail=invalid API token.
+- POST https://green.cutdee.com/api/render/tc05 without Authorization -> HTTP 401, total 0.093273s.
+- POST https://green.cutdee.com/api/render/tc06 without Authorization -> HTTP 401, total 0.114239s.
+- GET https://green.cutdee.com/old/ -> HTTP 410, total 0.090023s; Nginx 410 Gone.
+- Direct origin http://103.253.75.161:8788/healthz -> HTTP 000 from external probe after loopback bind.
+- Direct origin http://103.253.75.161:8789/health -> HTTP 000 from external probe after loopback bind.
+- Authenticated API contract (secret redacted from artifacts): GET /api/outputs -> HTTP 200, schema files/outputs/page/pages/limit/total, total=11; POST /api/auth/session -> HTTP 200, session expires_in=28800.

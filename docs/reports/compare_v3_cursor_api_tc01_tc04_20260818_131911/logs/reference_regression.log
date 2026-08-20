@@ -1,0 +1,4 @@
+COMMAND=PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -v tests.test_contract tests.test_contract_values tests.test_pipeline_results_tc01_tc02 tests.test_pipeline_results_tc03_tc04 tests.test_tc01_tc04_settings_validation tests.test_tc01_tc04_media_safety tests.test_tc01_tc04_seed_cancel_contract tests.test_tc04_audio_duration tests.test_path_utils_cross_platform
+ROOT=/Users/sj88/Documents/codex/V3_cursor
+RESULT=Ran 120 tests in 0.474s
+RESULT=OK

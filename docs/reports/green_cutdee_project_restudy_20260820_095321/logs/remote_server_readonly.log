@@ -1,0 +1,13 @@
+# Dedicated Server read-only observation
+
+Observed over SSH on 2026-08-20. Credentials are intentionally not recorded.
+
+- Hostname: `server`
+- `v3-cursor-api-gateway`: `active`, `enabled`
+- `v3-cursor-api-worker`: `active`, `enabled`
+- Gateway ExecStart: `/opt/v3-cursor-api/gateway/.venv/bin/python3 -m uvicorn app.backend.main:app --host 127.0.0.1 --port 8788`
+- Worker ExecStart: `/opt/v3-cursor-api/worker/.venv/bin/python3 -m uvicorn app.backend.main:app --host 127.0.0.1 --port 8789`
+- Environment files are `/etc/v3-cursor-api/gateway.env` and `/etc/v3-cursor-api/worker.env`; values were not printed.
+- Remote checkout reports `f6299fa` and has unrelated dirty files (`gateway/app/backend/main.py`, `worker/app/backend/main.py`, `.cache/`, and a backup file). It is not identical to the local `refactor-base` checkout.
+- Remote source SHA-256: gateway `4342bac0633ce879073611fc74c60bfba6581eeb3459eb7ebe68258ee0f5373c`; worker `8ecef9b896be110d4d44d0f74c2a6035432fe57cfadb9dda4d2091efb459099a`.
+- No worker registry JSON was found at the three checked conventional paths. The live public cluster API is therefore the current runtime evidence for node counts; it must not be replaced by a guessed registry file.

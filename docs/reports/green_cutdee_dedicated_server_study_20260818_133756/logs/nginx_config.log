@@ -1,0 +1,18 @@
+Study: green.cutdee.com Nginx evidence
+Mode: read-only inspection
+
+Active file:
+- /etc/nginx/sites-enabled/green.cutdee.com.conf -> /etc/nginx/sites-available/green.cutdee.com.conf
+
+Observed routes:
+- / -> /var/www/green/v3 with SPA fallback
+- /api/ -> http://127.0.0.1:8788/api/
+- /v3api/ -> http://127.0.0.1:8788/
+- /old/ -> http://127.0.0.1:21002/
+- /gs-api/ -> https://greenstats.sj88ai.com/api/v1/
+- /cluster-status -> /var/www/v3-dashboard.html
+- client_max_body_size: 200m
+
+nginx -t: syntax/test successful, with repeated warnings for protocol options redefined and conflicting server names including green.cutdee.com, cutdee.com, www.cutdee.com, green.sj88ai.com and green1.cutdee.com.
+
+Observed cause candidate: dated .bak vhost files are present under sites-enabled and therefore are in the wildcard include path. No Nginx mutation was performed.

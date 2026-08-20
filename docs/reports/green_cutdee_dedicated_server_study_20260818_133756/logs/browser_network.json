@@ -1,0 +1,8 @@
+{
+  "source": "real_browser_playwright",
+  "observed_requests": [
+    {"method": "GET", "url": "https://green.cutdee.com/api/health", "status": 200, "occurrences": 2},
+    {"method": "GET", "url": "https://green.cutdee.com/api/outputs?page=1&limit=5", "status": 200, "occurrences": 11}
+  ],
+  "static_requests_omitted_by_capture": 7
+}

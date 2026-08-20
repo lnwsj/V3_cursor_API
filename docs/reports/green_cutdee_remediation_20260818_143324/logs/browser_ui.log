@@ -1,0 +1,33 @@
+Browser surface: Chrome extension via Browser skill
+Target: https://green.cutdee.com/
+Session: Green Cutdee remediation verification
+
+UI checks:
+- title: 🟢 SJ88 Green Screen — ตัดจอเขียว • ออโต้ซูม • แบทช์
+- page non-blank: true
+- visible gallery guard: 🔒 ตั้งค่า API token ก่อนดู output
+- visible gallery stat: 🔒 Token required
+- visible version: v1.1.1 / V1.1.1
+- visible encoder after health load: ⚡ h264_nvenc
+- visible disk after health load: 💾 402 GB free
+- gallery filters: All, TC01, TC02, TC03, TC04, TC05, TC06
+- mode tabs: TC01, TC02, TC03, TC04, TC05, TC06, Stats
+- Render disabled with empty input: true
+- TC02 active: true; Render disabled: true
+- TC03 active: true; Render disabled: true
+- TC04 active: true; Render disabled: true
+- TC05 active: true; Render disabled: true
+- TC06 active: true; audio count: 0; Render disabled: true; busy: ⏸ Idle
+- legacy Browser route: https://green.cutdee.com/old/ -> heading 410 Gone
+
+Browser console:
+- expected unauthenticated gallery 401 guard was logged by page code
+- no unexpected JavaScript error was observed in final page state
+
+Screenshot SHA256:
+01_open_page.png 247d2d8d37428a3ae3efb2989894a99ba92569926e0d847dee88752c3a278f49
+02_input_ready.png 0b9d0f35b7668b620a9a220f8e6cb99dba8474d552f342ccc6f6ed7ebfc7dfe9
+03_click_generate.png 8520ca093e3f01889b8d5a2db45d314790f9436dd45fa0c06dc5ad4029a7ecf7
+04_result_state.png 8520ca093e3f01889b8d5a2db45d314790f9436dd45fa0c06dc5ad4029a7ecf7
+05_audio_ready_or_error.png 425cbbef14676e4a104f68627a9ac1dcc41a1a9d6dac0becaf59565eb8558099
+06_legacy_route_410.png 80cbe20e3ed4accc7e41a6ca3c7dab7a89e37cc21a391102e2d90bb14e979e28

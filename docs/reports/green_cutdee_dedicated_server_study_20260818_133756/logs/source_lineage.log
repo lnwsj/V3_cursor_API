@@ -1,0 +1,25 @@
+Study: deployed source and artifact lineage
+Mode: read-only filesystem and git inspection
+
+V3 repository:
+- path: /opt/v3-cursor-api
+- origin: https://github.com/lnwsj/V3_cursor_API.git
+- HEAD: f3ef05e7a83448ac3283f92c6df668e6ac4fbe12
+- commit subject: fix(worker): filter upload files from output_files list
+- tracked diff files: 0
+- untracked files: 24
+- gateway main.py SHA-256: 9de775be7d4a3987b45776a5b983d6ed53de98c5384a525cd37002265dd06139
+- worker main.py SHA-256: 95d17bc01ff9c61ffa49d0eb372c52b9b032a720c9eed81f12ccb690d03eb66a
+- local reference hashes matched the deployed gateway/worker hashes
+
+Frontend:
+- root: /var/www/green/v3
+- index.html SHA-256: 525b3b61cb48c9fe6fb237888e4c61173cb46630292afe1225ccf73cba49f5a2
+- static UI version: V1.0.0.20
+
+Legacy tree:
+- /opt/green.cutdee.com exists and is approximately 6.0G
+- no .git repository was observed there
+- its README contains stale/contradictory historical server context; it is not treated as current live source of truth
+
+No source or deployed artifact was modified.

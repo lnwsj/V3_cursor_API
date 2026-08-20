@@ -1,0 +1,5 @@
+COMMAND=compile source files using compile(...,'exec') with utf-8-sig and PYTHONDONTWRITEBYTECODE=1
+ROOT=/Users/sj88/Documents/codex/V3_cursor_API
+FILES=55
+COMPILE_ERRORS=0
+RESULT=55/55 source files compile

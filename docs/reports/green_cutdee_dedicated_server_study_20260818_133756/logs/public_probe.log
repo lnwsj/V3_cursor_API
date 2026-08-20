@@ -1,0 +1,28 @@
+Study: public UI/API probe evidence
+Mode: safe GET/HEAD and real browser navigation only
+
+HTTP observations:
+- https://green.cutdee.com/: HTTP 200; browser rendered the application
+- /api/health: HTTP 200 JSON
+- /api/cluster/health: HTTP 200 JSON; ok=true, healthy=4, total=5, capacity=9, active_jobs=0
+- /api/outputs?page=1&limit=5: HTTP 200 JSON; response contained 100 output records
+- /v3api/healthz: HTTP 200 JSON
+- /v3api/api/cluster/health: HTTP 200 JSON
+- /v3api/openapi.json: HTTP 200 JSON
+- /old/health: HTTP 200 JSON from the legacy port path
+- /api/docs, /api/openapi.json, /v3api/health and /v3api/cluster/health: 404 under those exact paths
+
+Browser observations:
+- title: SJ88 Green Screen application
+- visible tabs: TC01 through TC06 and Stats
+- status: Idle; 0 products -> 0 outputs; gallery: 0 videos
+- footer: ffmpeg ok; GPU badge: No GPU detected — using CPU
+- console errors/warnings: 0
+- five real screenshots saved under ../screenshots/
+
+Contract mismatch confirmed by pair:
+- UI source reads d.files and renders 0 files
+- gateway response source returns outputs and live API returned 100 records
+- UI static version is V1.0.0.20 while API version is 1.1.0-cluster
+
+No POST, upload, render, cancel, pause, resume, delete or other mutating request was sent.

@@ -1,0 +1,9 @@
+Changes and RCA:
+1. Gateway allowed anonymous mutation/list/download paths and leaked internal worker details. Added configured bearer/session auth, ownership checks, safe output names, authenticated downloads, sanitized health/cluster responses, API aliases, normalized status, and explicit 501 for unimplemented pause/resume.
+2. Frontend assumed old output schema and thumbnail endpoints, showed a generic Error on a normal 401, omitted TC05/TC06 gallery filters, and persisted bearer token in localStorage. Switched to files/path contract and same-origin HttpOnly session exchange, added TC05/TC06 filters, Token required state, and safe RAM tooltip fallback.
+3. Nginx loaded dated backup vhosts from sites-enabled, conflicted on target names, exposed /old/ to a broken legacy service, and lacked target security headers. Moved only backup files/symlink outside include, installed headers, and returned 410 for /old/.
+4. Legacy systemd service crash-looped because the checksum algorithm changed from raw SQL hash to normalized SQL hash. SQLite integrity and schema were compatible; backed up the DB, added exact legacy-hash compatibility/transactional upgrade, and restarted under www-data. Detached root-owned duplicate PID 2321696/2321697 was stopped after no active connections.
+5. Worker registry kept unreachable RTX2050 slot enabled, making health degraded. Disabled only sj88ai-rtx2050-01 after connectivity evidence and exposed configured/disabled counts.
+6. V3 gateway/worker listened on 0.0.0.0 and bypassed Nginx. Added systemd loopback drop-ins; public site remained HTTP 200 while direct ports became unreachable.
+
+Backups created remotely (recoverable, not deleted): gateway source, frontend index, Nginx vhost, legacy schema, workers.json, systemd drop-ins if pre-existing, and SQLite DB before checksum repair.

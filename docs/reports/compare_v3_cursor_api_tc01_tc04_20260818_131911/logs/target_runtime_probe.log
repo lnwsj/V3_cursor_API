@@ -1,0 +1,3 @@
+REFERENCE_PROBE=parallel_max=3; validate_parallel_4=ValueError; pick_none=[center,left,right]; windows_stem=Bar-1; scale=1080:1920
+TARGET_PROBE=parallel_max=10; validate_parallel_4=4; pick_none=ValueError; windows_stem_contains_full_path=true; default_reframe_short_side=720; scale=404:720
+WORKER_PROBE=batch_download=HTTPException: output not found; output_prefix_download=FileResponse; source_ids_to_inputs=[[],[],[],[]]

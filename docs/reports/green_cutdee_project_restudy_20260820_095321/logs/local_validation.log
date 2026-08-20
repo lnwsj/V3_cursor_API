@@ -1,0 +1,1028 @@
+=== git status ===
+## refactor-base
+ M CLAUDE.md
+?? .playwright-mcp/
+?? .ssh/
+?? docs/reports/
+25e1032 fix(gateway): repair router package after Phase 3 refactor
+=== source sizes ===
+     155 gateway/app/backend/main.py
+    1028 worker/app/backend/main.py
+       2 gateway/app/backend/routers/__init__.py
+     252 gateway/app/backend/routers/auth.py
+     173 gateway/app/backend/routers/cluster.py
+     238 gateway/app/backend/routers/jobs.py
+      77 gateway/app/backend/routers/pages.py
+      80 gateway/app/backend/routers/system.py
+      64 gateway/app/backend/routers/uploads.py
+      42 gateway/app/backend/routers/users.py
+     111 gateway/app/backend/routers/ws.py
+       0 gateway/app/backend/services/__init__.py
+     179 gateway/app/backend/services/db.py
+     260 gateway/app/backend/services/jobs.py
+     189 gateway/app/backend/services/metrics.py
+     289 gateway/app/backend/services/users.py
+     255 gateway/app/backend/services/workers.py
+    3394 total
+=== unit tests ===
+/Users/sj88/Documents/codex/V3_cursor_API/.venv/lib/python3.9/site-packages/pytest_asyncio/plugin.py:208: PytestDeprecationWarning: The configuration option "asyncio_default_fixture_loop_scope" is unset.
+The event loop scope for asynchronous fixtures will default to the fixture caching scope. Future versions of pytest-asyncio will default the loop scope for asynchronous fixtures to function scope. Set the default fixture loop scope explicitly in order to avoid unexpected behavior in the future. Valid fixture loop scopes are: "function", "class", "module", "package", "session"
+
+  warnings.warn(PytestDeprecationWarning(_DEFAULT_FIXTURE_LOOP_SCOPE_UNSET))
+============================= test session starts ==============================
+platform darwin -- Python 3.9.6, pytest-8.3.4, pluggy-1.6.0
+rootdir: /Users/sj88/Documents/codex/V3_cursor_API
+configfile: pytest.ini
+plugins: anyio-4.12.1, asyncio-0.24.0, cov-5.0.0
+asyncio: mode=auto, default_loop_scope=None
+collected 45 items
+
+tests/unit/test_cpu_limit.py ......                                      [ 13%]
+tests/unit/test_gateway_contract.py .....                                [ 24%]
+tests/unit/test_gpu_detector.py ......                                   [ 37%]
+tests/unit/test_media_probe.py ..........                                [ 60%]
+tests/unit/test_planner.py .....                                         [ 71%]
+tests/unit/test_worker_contract.py .........                             [ 91%]
+tests/unit/test_worker_lifecycle.py ....                                 [100%]
+
+=============================== warnings summary ===============================
+gateway/app/backend/routers/uploads.py:44
+  /Users/sj88/Documents/codex/V3_cursor_API/gateway/app/backend/routers/uploads.py:44: DeprecationWarning: `regex` has been deprecated, please use `pattern` instead
+    role: str = PathParam(..., regex="^(product|background|cover|audio|source|product_root)$"),
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+======================== 45 passed, 1 warning in 0.62s =========================
+pytest_exit=0
+=== compileall ===
+compileall_exit=0
+=== ruff check entrypoints ===
+gateway/app/backend/main.py:17:8: F401 [*] `sys` imported but unused
+   |
+16 | import os
+17 | import sys
+   |        ^^^ F401
+18 | import time
+19 | import json
+   |
+   = help: Remove unused import: `sys`
+
+gateway/app/backend/main.py:18:8: F401 [*] `time` imported but unused
+   |
+16 | import os
+17 | import sys
+18 | import time
+   |        ^^^^ F401
+19 | import json
+20 | import secrets
+   |
+   = help: Remove unused import: `time`
+
+gateway/app/backend/main.py:20:8: F401 [*] `secrets` imported but unused
+   |
+18 | import time
+19 | import json
+20 | import secrets
+   |        ^^^^^^^ F401
+21 | import hmac
+22 | import io
+   |
+   = help: Remove unused import: `secrets`
+
+gateway/app/backend/main.py:21:8: F401 [*] `hmac` imported but unused
+   |
+19 | import json
+20 | import secrets
+21 | import hmac
+   |        ^^^^ F401
+22 | import io
+23 | import hashlib
+   |
+   = help: Remove unused import: `hmac`
+
+gateway/app/backend/main.py:22:8: F401 [*] `io` imported but unused
+   |
+20 | import secrets
+21 | import hmac
+22 | import io
+   |        ^^ F401
+23 | import hashlib
+24 | import logging
+   |
+   = help: Remove unused import: `io`
+
+gateway/app/backend/main.py:23:8: F401 [*] `hashlib` imported but unused
+   |
+21 | import hmac
+22 | import io
+23 | import hashlib
+   |        ^^^^^^^ F401
+24 | import logging
+25 | import re
+   |
+   = help: Remove unused import: `hashlib`
+
+gateway/app/backend/main.py:24:8: F401 [*] `logging` imported but unused
+   |
+22 | import io
+23 | import hashlib
+24 | import logging
+   |        ^^^^^^^ F401
+25 | import re
+26 | import shutil
+   |
+   = help: Remove unused import: `logging`
+
+gateway/app/backend/main.py:25:8: F401 [*] `re` imported but unused
+   |
+23 | import hashlib
+24 | import logging
+25 | import re
+   |        ^^ F401
+26 | import shutil
+27 | import threading
+   |
+   = help: Remove unused import: `re`
+
+gateway/app/backend/main.py:26:8: F401 [*] `shutil` imported but unused
+   |
+24 | import logging
+25 | import re
+26 | import shutil
+   |        ^^^^^^ F401
+27 | import threading
+28 | import asyncio
+   |
+   = help: Remove unused import: `shutil`
+
+gateway/app/backend/main.py:27:8: F401 [*] `threading` imported but unused
+   |
+25 | import re
+26 | import shutil
+27 | import threading
+   |        ^^^^^^^^^ F401
+28 | import asyncio
+29 | import zipfile
+   |
+   = help: Remove unused import: `threading`
+
+gateway/app/backend/main.py:28:8: F401 [*] `asyncio` imported but unused
+   |
+26 | import shutil
+27 | import threading
+28 | import asyncio
+   |        ^^^^^^^ F401
+29 | import zipfile
+30 | from contextlib import asynccontextmanager
+   |
+   = help: Remove unused import: `asyncio`
+
+gateway/app/backend/main.py:29:8: F401 [*] `zipfile` imported but unused
+   |
+27 | import threading
+28 | import asyncio
+29 | import zipfile
+   |        ^^^^^^^ F401
+30 | from contextlib import asynccontextmanager
+31 | from pathlib import Path
+   |
+   = help: Remove unused import: `zipfile`
+
+gateway/app/backend/main.py:32:20: F401 [*] `typing.Any` imported but unused
+   |
+30 | from contextlib import asynccontextmanager
+31 | from pathlib import Path
+32 | from typing import Any, Dict, List, Optional
+   |                    ^^^ F401
+33 | from datetime import datetime, timezone
+   |
+   = help: Remove unused import
+
+gateway/app/backend/main.py:32:25: F401 [*] `typing.Dict` imported but unused
+   |
+30 | from contextlib import asynccontextmanager
+31 | from pathlib import Path
+32 | from typing import Any, Dict, List, Optional
+   |                         ^^^^ F401
+33 | from datetime import datetime, timezone
+   |
+   = help: Remove unused import
+
+gateway/app/backend/main.py:32:31: F401 [*] `typing.List` imported but unused
+   |
+30 | from contextlib import asynccontextmanager
+31 | from pathlib import Path
+32 | from typing import Any, Dict, List, Optional
+   |                               ^^^^ F401
+33 | from datetime import datetime, timezone
+   |
+   = help: Remove unused import
+
+gateway/app/backend/main.py:32:37: F401 [*] `typing.Optional` imported but unused
+   |
+30 | from contextlib import asynccontextmanager
+31 | from pathlib import Path
+32 | from typing import Any, Dict, List, Optional
+   |                                     ^^^^^^^^ F401
+33 | from datetime import datetime, timezone
+   |
+   = help: Remove unused import
+
+gateway/app/backend/main.py:33:22: F401 [*] `datetime.datetime` imported but unused
+   |
+31 | from pathlib import Path
+32 | from typing import Any, Dict, List, Optional
+33 | from datetime import datetime, timezone
+   |                      ^^^^^^^^ F401
+34 | 
+35 | import httpx
+   |
+   = help: Remove unused import
+
+gateway/app/backend/main.py:33:32: F401 [*] `datetime.timezone` imported but unused
+   |
+31 | from pathlib import Path
+32 | from typing import Any, Dict, List, Optional
+33 | from datetime import datetime, timezone
+   |                                ^^^^^^^^ F401
+34 | 
+35 | import httpx
+   |
+   = help: Remove unused import
+
+gateway/app/backend/main.py:35:8: F401 [*] `httpx` imported but unused
+   |
+33 | from datetime import datetime, timezone
+34 | 
+35 | import httpx
+   |        ^^^^^ F401
+36 | try:
+37 |     import psycopg2
+   |
+   = help: Remove unused import: `httpx`
+
+gateway/app/backend/main.py:41:21: F401 [*] `fastapi.Cookie` imported but unused
+   |
+39 | except ImportError:  # pragma: no cover - production installs psycopg2-binary
+40 |     psycopg2 = None  # type: ignore[assignment]
+41 | from fastapi import Cookie, FastAPI, Request, HTTPException, UploadFile, File, Form, Header, Depends, Response, Security, WebSocket, WebSocketDisconnect
+   |                     ^^^^^^ F401
+42 | from fastapi.middleware.cors import CORSMiddleware
+43 | from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
+   |
+   = help: Remove unused import
+
+gateway/app/backend/main.py:41:38: F401 [*] `fastapi.Request` imported but unused
+   |
+39 | except ImportError:  # pragma: no cover - production installs psycopg2-binary
+40 |     psycopg2 = None  # type: ignore[assignment]
+41 | from fastapi import Cookie, FastAPI, Request, HTTPException, UploadFile, File, Form, Header, Depends, Response, Security, WebSocket, WebSocketDisconnect
+   |                                      ^^^^^^^ F401
+42 | from fastapi.middleware.cors import CORSMiddleware
+43 | from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
+   |
+   = help: Remove unused import
+
+gateway/app/backend/main.py:41:47: F401 [*] `fastapi.HTTPException` imported but unused
+   |
+39 | except ImportError:  # pragma: no cover - production installs psycopg2-binary
+40 |     psycopg2 = None  # type: ignore[assignment]
+41 | from fastapi import Cookie, FastAPI, Request, HTTPException, UploadFile, File, Form, Header, Depends, Response, Security, WebSocket, WebSocketDisconnect
+   |                                               ^^^^^^^^^^^^^ F401
+42 | from fastapi.middleware.cors import CORSMiddleware
+43 | from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
+   |
+   = help: Remove unused import
+
+gateway/app/backend/main.py:41:62: F401 [*] `fastapi.UploadFile` imported but unused
+   |
+39 | except ImportError:  # pragma: no cover - production installs psycopg2-binary
+40 |     psycopg2 = None  # type: ignore[assignment]
+41 | from fastapi import Cookie, FastAPI, Request, HTTPException, UploadFile, File, Form, Header, Depends, Response, Security, WebSocket, WebSocketDisconnect
+   |                                                              ^^^^^^^^^^ F401
+42 | from fastapi.middleware.cors import CORSMiddleware
+43 | from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
+   |
+   = help: Remove unused import
+
+gateway/app/backend/main.py:41:74: F401 [*] `fastapi.File` imported but unused
+   |
+39 | except ImportError:  # pragma: no cover - production installs psycopg2-binary
+40 |     psycopg2 = None  # type: ignore[assignment]
+41 | from fastapi import Cookie, FastAPI, Request, HTTPException, UploadFile, File, Form, Header, Depends, Response, Security, WebSocket, WebSocketDisconnect
+   |                                                                          ^^^^ F401
+42 | from fastapi.middleware.cors import CORSMiddleware
+43 | from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
+   |
+   = help: Remove unused import
+
+gateway/app/backend/main.py:41:80: F401 [*] `fastapi.Form` imported but unused
+   |
+39 | except ImportError:  # pragma: no cover - production installs psycopg2-binary
+40 |     psycopg2 = None  # type: ignore[assignment]
+41 | from fastapi import Cookie, FastAPI, Request, HTTPException, UploadFile, File, Form, Header, Depends, Response, Security, WebSocket, WebSocketDisconnect
+   |                                                                                ^^^^ F401
+42 | from fastapi.middleware.cors import CORSMiddleware
+43 | from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
+   |
+   = help: Remove unused import
+
+gateway/app/backend/main.py:41:86: F401 [*] `fastapi.Header` imported but unused
+   |
+39 | except ImportError:  # pragma: no cover - production installs psycopg2-binary
+40 |     psycopg2 = None  # type: ignore[assignment]
+41 | from fastapi import Cookie, FastAPI, Request, HTTPException, UploadFile, File, Form, Header, Depends, Response, Security, WebSocket, WebSocketDisconnect
+   |                                                                                      ^^^^^^ F401
+42 | from fastapi.middleware.cors import CORSMiddleware
+43 | from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
+   |
+   = help: Remove unused import
+
+gateway/app/backend/main.py:41:94: F401 [*] `fastapi.Depends` imported but unused
+   |
+39 | except ImportError:  # pragma: no cover - production installs psycopg2-binary
+40 |     psycopg2 = None  # type: ignore[assignment]
+41 | from fastapi import Cookie, FastAPI, Request, HTTPException, UploadFile, File, Form, Header, Depends, Response, Security, WebSocket, WebSocketDisconnect
+   |                                                                                              ^^^^^^^ F401
+42 | from fastapi.middleware.cors import CORSMiddleware
+43 | from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
+   |
+   = help: Remove unused import
+
+gateway/app/backend/main.py:41:103: F401 [*] `fastapi.Response` imported but unused
+   |
+39 | except ImportError:  # pragma: no cover - production installs psycopg2-binary
+40 |     psycopg2 = None  # type: ignore[assignment]
+41 | from fastapi import Cookie, FastAPI, Request, HTTPException, UploadFile, File, Form, Header, Depends, Response, Security, WebSocket, WebSocketDisconnect
+   |                                                                                                       ^^^^^^^^ F401
+42 | from fastapi.middleware.cors import CORSMiddleware
+43 | from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
+   |
+   = help: Remove unused import
+
+gateway/app/backend/main.py:41:113: F401 [*] `fastapi.Security` imported but unused
+   |
+39 | except ImportError:  # pragma: no cover - production installs psycopg2-binary
+40 |     psycopg2 = None  # type: ignore[assignment]
+41 | from fastapi import Cookie, FastAPI, Request, HTTPException, UploadFile, File, Form, Header, Depends, Response, Security, WebSocket, WebSocketDisconnect
+   |                                                                                                                 ^^^^^^^^ F401
+42 | from fastapi.middleware.cors import CORSMiddleware
+43 | from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
+   |
+   = help: Remove unused import
+
+gateway/app/backend/main.py:41:123: F401 [*] `fastapi.WebSocket` imported but unused
+   |
+39 | except ImportError:  # pragma: no cover - production installs psycopg2-binary
+40 |     psycopg2 = None  # type: ignore[assignment]
+41 | from fastapi import Cookie, FastAPI, Request, HTTPException, UploadFile, File, Form, Header, Depends, Response, Security, WebSocket, WebSocketDisconnect
+   |                                                                                                                           ^^^^^^^^^ F401
+42 | from fastapi.middleware.cors import CORSMiddleware
+43 | from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
+   |
+   = help: Remove unused import
+
+gateway/app/backend/main.py:41:134: F401 [*] `fastapi.WebSocketDisconnect` imported but unused
+   |
+39 | except ImportError:  # pragma: no cover - production installs psycopg2-binary
+40 |     psycopg2 = None  # type: ignore[assignment]
+41 | from fastapi import Cookie, FastAPI, Request, HTTPException, UploadFile, File, Form, Header, Depends, Response, Security, WebSocket, WebSocketDisconnect
+   |                                                                                                                                      ^^^^^^^^^^^^^^^^^^^ F401
+42 | from fastapi.middleware.cors import CORSMiddleware
+43 | from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
+   |
+   = help: Remove unused import
+
+gateway/app/backend/main.py:43:31: F401 [*] `fastapi.responses.FileResponse` imported but unused
+   |
+41 | from fastapi import Cookie, FastAPI, Request, HTTPException, UploadFile, File, Form, Header, Depends, Response, Security, WebSocket, WebSocketDisconnect
+42 | from fastapi.middleware.cors import CORSMiddleware
+43 | from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
+   |                               ^^^^^^^^^^^^ F401
+44 | from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+45 | # Re-export symbols from core for backward compat
+   |
+   = help: Remove unused import
+
+gateway/app/backend/main.py:43:45: F401 [*] `fastapi.responses.HTMLResponse` imported but unused
+   |
+41 | from fastapi import Cookie, FastAPI, Request, HTTPException, UploadFile, File, Form, Header, Depends, Response, Security, WebSocket, WebSocketDisconnect
+42 | from fastapi.middleware.cors import CORSMiddleware
+43 | from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
+   |                                             ^^^^^^^^^^^^ F401
+44 | from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+45 | # Re-export symbols from core for backward compat
+   |
+   = help: Remove unused import
+
+gateway/app/backend/main.py:43:59: F401 [*] `fastapi.responses.JSONResponse` imported but unused
+   |
+41 | from fastapi import Cookie, FastAPI, Request, HTTPException, UploadFile, File, Form, Header, Depends, Response, Security, WebSocket, WebSocketDisconnect
+42 | from fastapi.middleware.cors import CORSMiddleware
+43 | from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
+   |                                                           ^^^^^^^^^^^^ F401
+44 | from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+45 | # Re-export symbols from core for backward compat
+   |
+   = help: Remove unused import
+
+gateway/app/backend/main.py:44:30: F401 [*] `fastapi.security.HTTPAuthorizationCredentials` imported but unused
+   |
+42 | from fastapi.middleware.cors import CORSMiddleware
+43 | from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
+44 | from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+   |                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^ F401
+45 | # Re-export symbols from core for backward compat
+46 | from .core.helpers import (
+   |
+   = help: Remove unused import
+
+gateway/app/backend/main.py:44:60: F401 [*] `fastapi.security.HTTPBearer` imported but unused
+   |
+42 | from fastapi.middleware.cors import CORSMiddleware
+43 | from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
+44 | from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+   |                                                            ^^^^^^^^^^ F401
+45 | # Re-export symbols from core for backward compat
+46 | from .core.helpers import (
+   |
+   = help: Remove unused import
+
+gateway/app/backend/main.py:48:20: F401 [*] `.core.helpers.SESSION_COOKIE_NAME` imported but unused
+   |
+46 | from .core.helpers import (
+47 |     GATEWAY_PORT, API_VERSION, BUILD_COMMIT, INTERNAL_TOKEN, PUBLIC_API_KEYS,
+48 |     ADMIN_API_KEY, SESSION_COOKIE_NAME, _SESSION_KEYS, DEFAULT_DATA_DIR, DATA_DIR,
+   |                    ^^^^^^^^^^^^^^^^^^^ F401
+49 |     UPLOADS_DIR, OUTPUTS_DIR, PG_HOST, PG_PORT, PG_NAME, PG_USER, SAFE_OUTPUT_NAME,
+50 |     SAFE_FILE_ID, BEARER_SCHEME, WORKER_TIMEOUT, MAX_LIST_LIMIT, MAX_UPLOAD_BYTES,
+   |
+   = help: Remove unused import
+
+gateway/app/backend/main.py:48:41: F401 [*] `.core.helpers._SESSION_KEYS` imported but unused
+   |
+46 | from .core.helpers import (
+47 |     GATEWAY_PORT, API_VERSION, BUILD_COMMIT, INTERNAL_TOKEN, PUBLIC_API_KEYS,
+48 |     ADMIN_API_KEY, SESSION_COOKIE_NAME, _SESSION_KEYS, DEFAULT_DATA_DIR, DATA_DIR,
+   |                                         ^^^^^^^^^^^^^ F401
+49 |     UPLOADS_DIR, OUTPUTS_DIR, PG_HOST, PG_PORT, PG_NAME, PG_USER, SAFE_OUTPUT_NAME,
+50 |     SAFE_FILE_ID, BEARER_SCHEME, WORKER_TIMEOUT, MAX_LIST_LIMIT, MAX_UPLOAD_BYTES,
+   |
+   = help: Remove unused import
+
+gateway/app/backend/main.py:49:31: F401 [*] `.core.helpers.PG_HOST` imported but unused
+   |
+47 |     GATEWAY_PORT, API_VERSION, BUILD_COMMIT, INTERNAL_TOKEN, PUBLIC_API_KEYS,
+48 |     ADMIN_API_KEY, SESSION_COOKIE_NAME, _SESSION_KEYS, DEFAULT_DATA_DIR, DATA_DIR,
+49 |     UPLOADS_DIR, OUTPUTS_DIR, PG_HOST, PG_PORT, PG_NAME, PG_USER, SAFE_OUTPUT_NAME,
+   |                               ^^^^^^^ F401
+50 |     SAFE_FILE_ID, BEARER_SCHEME, WORKER_TIMEOUT, MAX_LIST_LIMIT, MAX_UPLOAD_BYTES,
+51 |     TERMINAL_JOB_STATUSES, _bearer_token, _user_for_token, _verify_internal,
+   |
+   = help: Remove unused import
+
+gateway/app/backend/main.py:49:40: F401 [*] `.core.helpers.PG_PORT` imported but unused
+   |
+47 |     GATEWAY_PORT, API_VERSION, BUILD_COMMIT, INTERNAL_TOKEN, PUBLIC_API_KEYS,
+48 |     ADMIN_API_KEY, SESSION_COOKIE_NAME, _SESSION_KEYS, DEFAULT_DATA_DIR, DATA_DIR,
+49 |     UPLOADS_DIR, OUTPUTS_DIR, PG_HOST, PG_PORT, PG_NAME, PG_USER, SAFE_OUTPUT_NAME,
+   |                                        ^^^^^^^ F401
+50 |     SAFE_FILE_ID, BEARER_SCHEME, WORKER_TIMEOUT, MAX_LIST_LIMIT, MAX_UPLOAD_BYTES,
+51 |     TERMINAL_JOB_STATUSES, _bearer_token, _user_for_token, _verify_internal,
+   |
+   = help: Remove unused import
+
+gateway/app/backend/main.py:49:49: F401 [*] `.core.helpers.PG_NAME` imported but unused
+   |
+47 |     GATEWAY_PORT, API_VERSION, BUILD_COMMIT, INTERNAL_TOKEN, PUBLIC_API_KEYS,
+48 |     ADMIN_API_KEY, SESSION_COOKIE_NAME, _SESSION_KEYS, DEFAULT_DATA_DIR, DATA_DIR,
+49 |     UPLOADS_DIR, OUTPUTS_DIR, PG_HOST, PG_PORT, PG_NAME, PG_USER, SAFE_OUTPUT_NAME,
+   |                                                 ^^^^^^^ F401
+50 |     SAFE_FILE_ID, BEARER_SCHEME, WORKER_TIMEOUT, MAX_LIST_LIMIT, MAX_UPLOAD_BYTES,
+51 |     TERMINAL_JOB_STATUSES, _bearer_token, _user_for_token, _verify_internal,
+   |
+   = help: Remove unused import
+
+gateway/app/backend/main.py:49:58: F401 [*] `.core.helpers.PG_USER` imported but unused
+   |
+47 |     GATEWAY_PORT, API_VERSION, BUILD_COMMIT, INTERNAL_TOKEN, PUBLIC_API_KEYS,
+48 |     ADMIN_API_KEY, SESSION_COOKIE_NAME, _SESSION_KEYS, DEFAULT_DATA_DIR, DATA_DIR,
+49 |     UPLOADS_DIR, OUTPUTS_DIR, PG_HOST, PG_PORT, PG_NAME, PG_USER, SAFE_OUTPUT_NAME,
+   |                                                          ^^^^^^^ F401
+50 |     SAFE_FILE_ID, BEARER_SCHEME, WORKER_TIMEOUT, MAX_LIST_LIMIT, MAX_UPLOAD_BYTES,
+51 |     TERMINAL_JOB_STATUSES, _bearer_token, _user_for_token, _verify_internal,
+   |
+   = help: Remove unused import
+
+gateway/app/backend/main.py:49:67: F401 [*] `.core.helpers.SAFE_OUTPUT_NAME` imported but unused
+   |
+47 |     GATEWAY_PORT, API_VERSION, BUILD_COMMIT, INTERNAL_TOKEN, PUBLIC_API_KEYS,
+48 |     ADMIN_API_KEY, SESSION_COOKIE_NAME, _SESSION_KEYS, DEFAULT_DATA_DIR, DATA_DIR,
+49 |     UPLOADS_DIR, OUTPUTS_DIR, PG_HOST, PG_PORT, PG_NAME, PG_USER, SAFE_OUTPUT_NAME,
+   |                                                                   ^^^^^^^^^^^^^^^^ F401
+50 |     SAFE_FILE_ID, BEARER_SCHEME, WORKER_TIMEOUT, MAX_LIST_LIMIT, MAX_UPLOAD_BYTES,
+51 |     TERMINAL_JOB_STATUSES, _bearer_token, _user_for_token, _verify_internal,
+   |
+   = help: Remove unused import
+
+gateway/app/backend/main.py:50:5: F401 [*] `.core.helpers.SAFE_FILE_ID` imported but unused
+   |
+48 |     ADMIN_API_KEY, SESSION_COOKIE_NAME, _SESSION_KEYS, DEFAULT_DATA_DIR, DATA_DIR,
+49 |     UPLOADS_DIR, OUTPUTS_DIR, PG_HOST, PG_PORT, PG_NAME, PG_USER, SAFE_OUTPUT_NAME,
+50 |     SAFE_FILE_ID, BEARER_SCHEME, WORKER_TIMEOUT, MAX_LIST_LIMIT, MAX_UPLOAD_BYTES,
+   |     ^^^^^^^^^^^^ F401
+51 |     TERMINAL_JOB_STATUSES, _bearer_token, _user_for_token, _verify_internal,
+52 |     _verify_user, _canonical_status,
+   |
+   = help: Remove unused import
+
+gateway/app/backend/main.py:50:19: F401 [*] `.core.helpers.BEARER_SCHEME` imported but unused
+   |
+48 |     ADMIN_API_KEY, SESSION_COOKIE_NAME, _SESSION_KEYS, DEFAULT_DATA_DIR, DATA_DIR,
+49 |     UPLOADS_DIR, OUTPUTS_DIR, PG_HOST, PG_PORT, PG_NAME, PG_USER, SAFE_OUTPUT_NAME,
+50 |     SAFE_FILE_ID, BEARER_SCHEME, WORKER_TIMEOUT, MAX_LIST_LIMIT, MAX_UPLOAD_BYTES,
+   |                   ^^^^^^^^^^^^^ F401
+51 |     TERMINAL_JOB_STATUSES, _bearer_token, _user_for_token, _verify_internal,
+52 |     _verify_user, _canonical_status,
+   |
+   = help: Remove unused import
+
+gateway/app/backend/main.py:50:34: F401 [*] `.core.helpers.WORKER_TIMEOUT` imported but unused
+   |
+48 |     ADMIN_API_KEY, SESSION_COOKIE_NAME, _SESSION_KEYS, DEFAULT_DATA_DIR, DATA_DIR,
+49 |     UPLOADS_DIR, OUTPUTS_DIR, PG_HOST, PG_PORT, PG_NAME, PG_USER, SAFE_OUTPUT_NAME,
+50 |     SAFE_FILE_ID, BEARER_SCHEME, WORKER_TIMEOUT, MAX_LIST_LIMIT, MAX_UPLOAD_BYTES,
+   |                                  ^^^^^^^^^^^^^^ F401
+51 |     TERMINAL_JOB_STATUSES, _bearer_token, _user_for_token, _verify_internal,
+52 |     _verify_user, _canonical_status,
+   |
+   = help: Remove unused import
+
+gateway/app/backend/main.py:50:50: F401 [*] `.core.helpers.MAX_LIST_LIMIT` imported but unused
+   |
+48 |     ADMIN_API_KEY, SESSION_COOKIE_NAME, _SESSION_KEYS, DEFAULT_DATA_DIR, DATA_DIR,
+49 |     UPLOADS_DIR, OUTPUTS_DIR, PG_HOST, PG_PORT, PG_NAME, PG_USER, SAFE_OUTPUT_NAME,
+50 |     SAFE_FILE_ID, BEARER_SCHEME, WORKER_TIMEOUT, MAX_LIST_LIMIT, MAX_UPLOAD_BYTES,
+   |                                                  ^^^^^^^^^^^^^^ F401
+51 |     TERMINAL_JOB_STATUSES, _bearer_token, _user_for_token, _verify_internal,
+52 |     _verify_user, _canonical_status,
+   |
+   = help: Remove unused import
+
+gateway/app/backend/main.py:50:66: F401 [*] `.core.helpers.MAX_UPLOAD_BYTES` imported but unused
+   |
+48 |     ADMIN_API_KEY, SESSION_COOKIE_NAME, _SESSION_KEYS, DEFAULT_DATA_DIR, DATA_DIR,
+49 |     UPLOADS_DIR, OUTPUTS_DIR, PG_HOST, PG_PORT, PG_NAME, PG_USER, SAFE_OUTPUT_NAME,
+50 |     SAFE_FILE_ID, BEARER_SCHEME, WORKER_TIMEOUT, MAX_LIST_LIMIT, MAX_UPLOAD_BYTES,
+   |                                                                  ^^^^^^^^^^^^^^^^ F401
+51 |     TERMINAL_JOB_STATUSES, _bearer_token, _user_for_token, _verify_internal,
+52 |     _verify_user, _canonical_status,
+   |
+   = help: Remove unused import
+
+gateway/app/backend/main.py:51:5: F401 [*] `.core.helpers.TERMINAL_JOB_STATUSES` imported but unused
+   |
+49 |     UPLOADS_DIR, OUTPUTS_DIR, PG_HOST, PG_PORT, PG_NAME, PG_USER, SAFE_OUTPUT_NAME,
+50 |     SAFE_FILE_ID, BEARER_SCHEME, WORKER_TIMEOUT, MAX_LIST_LIMIT, MAX_UPLOAD_BYTES,
+51 |     TERMINAL_JOB_STATUSES, _bearer_token, _user_for_token, _verify_internal,
+   |     ^^^^^^^^^^^^^^^^^^^^^ F401
+52 |     _verify_user, _canonical_status,
+53 |     # Backwards-compat shims (FIX 2026-08-20): re-exported so test_gateway_contract
+   |
+   = help: Remove unused import
+
+gateway/app/backend/main.py:51:28: F401 [*] `.core.helpers._bearer_token` imported but unused
+   |
+49 |     UPLOADS_DIR, OUTPUTS_DIR, PG_HOST, PG_PORT, PG_NAME, PG_USER, SAFE_OUTPUT_NAME,
+50 |     SAFE_FILE_ID, BEARER_SCHEME, WORKER_TIMEOUT, MAX_LIST_LIMIT, MAX_UPLOAD_BYTES,
+51 |     TERMINAL_JOB_STATUSES, _bearer_token, _user_for_token, _verify_internal,
+   |                            ^^^^^^^^^^^^^ F401
+52 |     _verify_user, _canonical_status,
+53 |     # Backwards-compat shims (FIX 2026-08-20): re-exported so test_gateway_contract
+   |
+   = help: Remove unused import
+
+gateway/app/backend/main.py:51:43: F401 [*] `.core.helpers._user_for_token` imported but unused
+   |
+49 |     UPLOADS_DIR, OUTPUTS_DIR, PG_HOST, PG_PORT, PG_NAME, PG_USER, SAFE_OUTPUT_NAME,
+50 |     SAFE_FILE_ID, BEARER_SCHEME, WORKER_TIMEOUT, MAX_LIST_LIMIT, MAX_UPLOAD_BYTES,
+51 |     TERMINAL_JOB_STATUSES, _bearer_token, _user_for_token, _verify_internal,
+   |                                           ^^^^^^^^^^^^^^^ F401
+52 |     _verify_user, _canonical_status,
+53 |     # Backwards-compat shims (FIX 2026-08-20): re-exported so test_gateway_contract
+   |
+   = help: Remove unused import
+
+gateway/app/backend/main.py:51:60: F401 [*] `.core.helpers._verify_internal` imported but unused
+   |
+49 |     UPLOADS_DIR, OUTPUTS_DIR, PG_HOST, PG_PORT, PG_NAME, PG_USER, SAFE_OUTPUT_NAME,
+50 |     SAFE_FILE_ID, BEARER_SCHEME, WORKER_TIMEOUT, MAX_LIST_LIMIT, MAX_UPLOAD_BYTES,
+51 |     TERMINAL_JOB_STATUSES, _bearer_token, _user_for_token, _verify_internal,
+   |                                                            ^^^^^^^^^^^^^^^^ F401
+52 |     _verify_user, _canonical_status,
+53 |     # Backwards-compat shims (FIX 2026-08-20): re-exported so test_gateway_contract
+   |
+   = help: Remove unused import
+
+gateway/app/backend/main.py:52:5: F401 [*] `.core.helpers._verify_user` imported but unused
+   |
+50 |     SAFE_FILE_ID, BEARER_SCHEME, WORKER_TIMEOUT, MAX_LIST_LIMIT, MAX_UPLOAD_BYTES,
+51 |     TERMINAL_JOB_STATUSES, _bearer_token, _user_for_token, _verify_internal,
+52 |     _verify_user, _canonical_status,
+   |     ^^^^^^^^^^^^ F401
+53 |     # Backwards-compat shims (FIX 2026-08-20): re-exported so test_gateway_contract
+54 |     # and external scripts keep working post-router-refactor.
+   |
+   = help: Remove unused import
+
+gateway/app/backend/main.py:52:19: F401 [*] `.core.helpers._canonical_status` imported but unused
+   |
+50 |     SAFE_FILE_ID, BEARER_SCHEME, WORKER_TIMEOUT, MAX_LIST_LIMIT, MAX_UPLOAD_BYTES,
+51 |     TERMINAL_JOB_STATUSES, _bearer_token, _user_for_token, _verify_internal,
+52 |     _verify_user, _canonical_status,
+   |                   ^^^^^^^^^^^^^^^^^ F401
+53 |     # Backwards-compat shims (FIX 2026-08-20): re-exported so test_gateway_contract
+54 |     # and external scripts keep working post-router-refactor.
+   |
+   = help: Remove unused import
+
+gateway/app/backend/main.py:55:5: F401 [*] `.core.helpers._normalize_status` imported but unused
+   |
+53 |     # Backwards-compat shims (FIX 2026-08-20): re-exported so test_gateway_contract
+54 |     # and external scripts keep working post-router-refactor.
+55 |     _normalize_status, _safe_output_name, _output_names, _coerce_form_value, _find_upload_path,
+   |     ^^^^^^^^^^^^^^^^^ F401
+56 | )
+57 | from pydantic import BaseModel, Field
+   |
+   = help: Remove unused import
+
+gateway/app/backend/main.py:55:24: F401 [*] `.core.helpers._safe_output_name` imported but unused
+   |
+53 |     # Backwards-compat shims (FIX 2026-08-20): re-exported so test_gateway_contract
+54 |     # and external scripts keep working post-router-refactor.
+55 |     _normalize_status, _safe_output_name, _output_names, _coerce_form_value, _find_upload_path,
+   |                        ^^^^^^^^^^^^^^^^^ F401
+56 | )
+57 | from pydantic import BaseModel, Field
+   |
+   = help: Remove unused import
+
+gateway/app/backend/main.py:55:43: F401 [*] `.core.helpers._output_names` imported but unused
+   |
+53 |     # Backwards-compat shims (FIX 2026-08-20): re-exported so test_gateway_contract
+54 |     # and external scripts keep working post-router-refactor.
+55 |     _normalize_status, _safe_output_name, _output_names, _coerce_form_value, _find_upload_path,
+   |                                           ^^^^^^^^^^^^^ F401
+56 | )
+57 | from pydantic import BaseModel, Field
+   |
+   = help: Remove unused import
+
+gateway/app/backend/main.py:55:58: F401 [*] `.core.helpers._coerce_form_value` imported but unused
+   |
+53 |     # Backwards-compat shims (FIX 2026-08-20): re-exported so test_gateway_contract
+54 |     # and external scripts keep working post-router-refactor.
+55 |     _normalize_status, _safe_output_name, _output_names, _coerce_form_value, _find_upload_path,
+   |                                                          ^^^^^^^^^^^^^^^^^^ F401
+56 | )
+57 | from pydantic import BaseModel, Field
+   |
+   = help: Remove unused import
+
+gateway/app/backend/main.py:55:78: F401 [*] `.core.helpers._find_upload_path` imported but unused
+   |
+53 |     # Backwards-compat shims (FIX 2026-08-20): re-exported so test_gateway_contract
+54 |     # and external scripts keep working post-router-refactor.
+55 |     _normalize_status, _safe_output_name, _output_names, _coerce_form_value, _find_upload_path,
+   |                                                                              ^^^^^^^^^^^^^^^^^ F401
+56 | )
+57 | from pydantic import BaseModel, Field
+   |
+   = help: Remove unused import
+
+gateway/app/backend/main.py:57:22: F401 [*] `pydantic.BaseModel` imported but unused
+   |
+55 |     _normalize_status, _safe_output_name, _output_names, _coerce_form_value, _find_upload_path,
+56 | )
+57 | from pydantic import BaseModel, Field
+   |                      ^^^^^^^^^ F401
+58 | 
+59 | # === Config ===
+   |
+   = help: Remove unused import
+
+gateway/app/backend/main.py:57:33: F401 [*] `pydantic.Field` imported but unused
+   |
+55 |     _normalize_status, _safe_output_name, _output_names, _coerce_form_value, _find_upload_path,
+56 | )
+57 | from pydantic import BaseModel, Field
+   |                                 ^^^^^ F401
+58 | 
+59 | # === Config ===
+   |
+   = help: Remove unused import
+
+gateway/app/backend/main.py:60:1: F811 Redefinition of unused `GATEWAY_PORT` from line 47
+   |
+59 | # === Config ===
+60 | GATEWAY_PORT = int(os.getenv("GATEWAY_PORT", "8788"))
+   | ^^^^^^^^^^^^ F811
+61 | API_VERSION = os.getenv("CUTDEE_API_VERSION", "1.2.0")
+62 | BUILD_COMMIT = os.getenv("V3_BUILD_COMMIT", "unknown")
+   |
+   = help: Remove definition: `GATEWAY_PORT`
+
+gateway/app/backend/main.py:61:1: F811 Redefinition of unused `API_VERSION` from line 47
+   |
+59 | # === Config ===
+60 | GATEWAY_PORT = int(os.getenv("GATEWAY_PORT", "8788"))
+61 | API_VERSION = os.getenv("CUTDEE_API_VERSION", "1.2.0")
+   | ^^^^^^^^^^^ F811
+62 | BUILD_COMMIT = os.getenv("V3_BUILD_COMMIT", "unknown")
+63 | INTERNAL_TOKEN = os.getenv("CUTDEE_INTERNAL_TOKEN", "")
+   |
+   = help: Remove definition: `API_VERSION`
+
+gateway/app/backend/main.py:62:1: F811 Redefinition of unused `BUILD_COMMIT` from line 47
+   |
+60 | GATEWAY_PORT = int(os.getenv("GATEWAY_PORT", "8788"))
+61 | API_VERSION = os.getenv("CUTDEE_API_VERSION", "1.2.0")
+62 | BUILD_COMMIT = os.getenv("V3_BUILD_COMMIT", "unknown")
+   | ^^^^^^^^^^^^ F811
+63 | INTERNAL_TOKEN = os.getenv("CUTDEE_INTERNAL_TOKEN", "")
+64 | PUBLIC_API_KEYS = list(
+   |
+   = help: Remove definition: `BUILD_COMMIT`
+
+gateway/app/backend/main.py:63:1: F811 Redefinition of unused `INTERNAL_TOKEN` from line 47
+   |
+61 | API_VERSION = os.getenv("CUTDEE_API_VERSION", "1.2.0")
+62 | BUILD_COMMIT = os.getenv("V3_BUILD_COMMIT", "unknown")
+63 | INTERNAL_TOKEN = os.getenv("CUTDEE_INTERNAL_TOKEN", "")
+   | ^^^^^^^^^^^^^^ F811
+64 | PUBLIC_API_KEYS = list(
+65 |     item.strip()
+   |
+   = help: Remove definition: `INTERNAL_TOKEN`
+
+gateway/app/backend/main.py:64:1: F811 Redefinition of unused `PUBLIC_API_KEYS` from line 47
+   |
+62 | BUILD_COMMIT = os.getenv("V3_BUILD_COMMIT", "unknown")
+63 | INTERNAL_TOKEN = os.getenv("CUTDEE_INTERNAL_TOKEN", "")
+64 | PUBLIC_API_KEYS = list(
+   | ^^^^^^^^^^^^^^^ F811
+65 |     item.strip()
+66 |     for item in os.getenv("CUTDEE_API_KEYS", "").split(",")
+   |
+   = help: Remove definition: `PUBLIC_API_KEYS`
+
+gateway/app/backend/main.py:69:1: F811 Redefinition of unused `ADMIN_API_KEY` from line 48
+   |
+67 |     if item.strip()
+68 | )
+69 | ADMIN_API_KEY = os.getenv("CUTDEE_ADMIN_API_KEY", "")
+   | ^^^^^^^^^^^^^ F811
+70 | # Session cache + cookie name now defined in services.users (Phase 1.2)
+   |
+   = help: Remove definition: `ADMIN_API_KEY`
+
+gateway/app/backend/main.py:72:1: F811 Redefinition of unused `DATA_DIR` from line 48
+   |
+70 | # Session cache + cookie name now defined in services.users (Phase 1.2)
+71 | 
+72 | DATA_DIR = Path(os.getenv("GATEWAY_DATA_DIR", str(DEFAULT_DATA_DIR)))
+   | ^^^^^^^^ F811
+73 | UPLOADS_DIR = DATA_DIR / "uploads"
+74 | OUTPUTS_DIR = DATA_DIR / "outputs"
+   |
+   = help: Remove definition: `DATA_DIR`
+
+gateway/app/backend/main.py:73:1: F811 Redefinition of unused `UPLOADS_DIR` from line 49
+   |
+72 | DATA_DIR = Path(os.getenv("GATEWAY_DATA_DIR", str(DEFAULT_DATA_DIR)))
+73 | UPLOADS_DIR = DATA_DIR / "uploads"
+   | ^^^^^^^^^^^ F811
+74 | OUTPUTS_DIR = DATA_DIR / "outputs"
+75 | DATA_DIR.mkdir(parents=True, exist_ok=True)
+   |
+   = help: Remove definition: `UPLOADS_DIR`
+
+gateway/app/backend/main.py:74:1: F811 Redefinition of unused `OUTPUTS_DIR` from line 49
+   |
+72 | DATA_DIR = Path(os.getenv("GATEWAY_DATA_DIR", str(DEFAULT_DATA_DIR)))
+73 | UPLOADS_DIR = DATA_DIR / "uploads"
+74 | OUTPUTS_DIR = DATA_DIR / "outputs"
+   | ^^^^^^^^^^^ F811
+75 | DATA_DIR.mkdir(parents=True, exist_ok=True)
+76 | UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
+   |
+   = help: Remove definition: `OUTPUTS_DIR`
+
+gateway/app/backend/main.py:80:1: E402 Module level import not at top of file
+   |
+79 |   # PostgreSQL (Phase 1.1 refactor: extracted to services.db)
+80 | / from .services.db import (
+81 | |     pg_conn as _pg_conn,
+82 | |     pg_cursor as _pg_cursor,
+83 | |     init_pool,
+84 | |     close_pool,
+85 | |     init_schema as _init_schema,
+86 | | )
+   | |_^ E402
+   |
+
+gateway/app/backend/main.py:81:16: F401 [*] `.services.db.pg_conn` imported but unused
+   |
+79 | # PostgreSQL (Phase 1.1 refactor: extracted to services.db)
+80 | from .services.db import (
+81 |     pg_conn as _pg_conn,
+   |                ^^^^^^^^ F401
+82 |     pg_cursor as _pg_cursor,
+83 |     init_pool,
+   |
+   = help: Remove unused import
+
+gateway/app/backend/main.py:82:18: F401 [*] `.services.db.pg_cursor` imported but unused
+   |
+80 | from .services.db import (
+81 |     pg_conn as _pg_conn,
+82 |     pg_cursor as _pg_cursor,
+   |                  ^^^^^^^^^^ F401
+83 |     init_pool,
+84 |     close_pool,
+   |
+   = help: Remove unused import
+
+gateway/app/backend/main.py:83:5: F401 [*] `.services.db.init_pool` imported but unused
+   |
+81 |     pg_conn as _pg_conn,
+82 |     pg_cursor as _pg_cursor,
+83 |     init_pool,
+   |     ^^^^^^^^^ F401
+84 |     close_pool,
+85 |     init_schema as _init_schema,
+   |
+   = help: Remove unused import
+
+gateway/app/backend/main.py:84:5: F401 [*] `.services.db.close_pool` imported but unused
+   |
+82 |     pg_cursor as _pg_cursor,
+83 |     init_pool,
+84 |     close_pool,
+   |     ^^^^^^^^^^ F401
+85 |     init_schema as _init_schema,
+86 | )
+   |
+   = help: Remove unused import
+
+gateway/app/backend/main.py:92:12: F821 Undefined name `WORKERS_FILE`
+   |
+90 | def _init_workers():
+91 |     """Load workers from workers.json, create default if empty."""
+92 |     if not WORKERS_FILE.exists():
+   |            ^^^^^^^^^^^^ F821
+93 |         # Create default
+94 |         WORKERS_FILE.parent.mkdir(parents=True, exist_ok=True)
+   |
+
+gateway/app/backend/main.py:94:9: F821 Undefined name `WORKERS_FILE`
+   |
+92 |     if not WORKERS_FILE.exists():
+93 |         # Create default
+94 |         WORKERS_FILE.parent.mkdir(parents=True, exist_ok=True)
+   |         ^^^^^^^^^^^^ F821
+95 |         with WORKERS_FILE.open("w") as f:
+96 |             json.dump({"workers": []}, f, indent=2)
+   |
+
+gateway/app/backend/main.py:95:14: F821 Undefined name `WORKERS_FILE`
+   |
+93 |         # Create default
+94 |         WORKERS_FILE.parent.mkdir(parents=True, exist_ok=True)
+95 |         with WORKERS_FILE.open("w") as f:
+   |              ^^^^^^^^^^^^ F821
+96 |             json.dump({"workers": []}, f, indent=2)
+97 |         log.info(f"created empty {WORKERS_FILE}")
+   |
+
+gateway/app/backend/main.py:97:9: F821 Undefined name `log`
+   |
+95 |         with WORKERS_FILE.open("w") as f:
+96 |             json.dump({"workers": []}, f, indent=2)
+97 |         log.info(f"created empty {WORKERS_FILE}")
+   |         ^^^ F821
+   |
+
+gateway/app/backend/main.py:97:35: F821 Undefined name `WORKERS_FILE`
+   |
+95 |         with WORKERS_FILE.open("w") as f:
+96 |             json.dump({"workers": []}, f, indent=2)
+97 |         log.info(f"created empty {WORKERS_FILE}")
+   |                                   ^^^^^^^^^^^^ F821
+   |
+
+gateway/app/backend/main.py:105:11: F821 Undefined name `_reconcile_active_jobs`
+    |
+103 |     _init_schema()
+104 |     _init_workers()
+105 |     await _reconcile_active_jobs()
+    |           ^^^^^^^^^^^^^^^^^^^^^^ F821
+106 |     yield
+    |
+
+gateway/app/backend/main.py:112:1: E402 Module level import not at top of file
+    |
+111 | # OpenAPI / Swagger UI (FIX 2026-08-19)
+112 | from fastapi.openapi.docs import get_swagger_ui_html, get_redoc_html
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ E402
+113 | from fastapi.openapi.utils import get_openapi
+    |
+
+gateway/app/backend/main.py:113:1: E402 Module level import not at top of file
+    |
+111 | # OpenAPI / Swagger UI (FIX 2026-08-19)
+112 | from fastapi.openapi.docs import get_swagger_ui_html, get_redoc_html
+113 | from fastapi.openapi.utils import get_openapi
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ E402
+114 | 
+115 | @app.get('/docs', include_in_schema=False)
+    |
+
+gateway/app/backend/main.py:147:1: E402 Module level import not at top of file
+    |
+146 | # Phase 2: register extracted routers
+147 | from .routers import auth, cluster, jobs, pages, system, uploads, users, ws
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ E402
+148 | app.include_router(auth.router)
+149 | app.include_router(users.router)
+    |
+
+worker/app/backend/main.py:34:1: E402 Module level import not at top of file
+   |
+32 | sys.path.insert(0, str(WORKER_ROOT))
+33 | 
+34 | from core.ffmpeg_runner import FfmpegResult
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ E402
+35 | from core.gpu_detector import effective_video_encoder, ffmpeg_supports_encoder, gpu_summary
+36 | from core.green_render import GreenSettings, render_green
+   |
+
+worker/app/backend/main.py:35:1: E402 Module level import not at top of file
+   |
+34 | from core.ffmpeg_runner import FfmpegResult
+35 | from core.gpu_detector import effective_video_encoder, ffmpeg_supports_encoder, gpu_summary
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ E402
+36 | from core.green_render import GreenSettings, render_green
+37 | from core.pipelines import (
+   |
+
+worker/app/backend/main.py:36:1: E402 Module level import not at top of file
+   |
+34 | from core.ffmpeg_runner import FfmpegResult
+35 | from core.gpu_detector import effective_video_encoder, ffmpeg_supports_encoder, gpu_summary
+36 | from core.green_render import GreenSettings, render_green
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ E402
+37 | from core.pipelines import (
+38 |     render_tc01,
+   |
+
+worker/app/backend/main.py:37:1: E402 Module level import not at top of file
+   |
+35 |   from core.gpu_detector import effective_video_encoder, ffmpeg_supports_encoder, gpu_summary
+36 |   from core.green_render import GreenSettings, render_green
+37 | / from core.pipelines import (
+38 | |     render_tc01,
+39 | |     render_tc02,
+40 | |     render_tc03,
+41 | |     render_tc04,
+42 | |     render_tc05,
+43 | |     render_tc06,
+44 | | )
+   | |_^ E402
+45 |   from core.pipelines._common import PipelineCallbacks, PipelineInputs
+   |
+
+worker/app/backend/main.py:45:1: E402 Module level import not at top of file
+   |
+43 |     render_tc06,
+44 | )
+45 | from core.pipelines._common import PipelineCallbacks, PipelineInputs
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ E402
+   |
+
+Found 89 errors.
+[*] 65 fixable with the `--fix` option.
+ruff_check_exit=1
+=== ruff format check entrypoints ===
+Would reformat: gateway/app/backend/main.py
+Would reformat: worker/app/backend/main.py
+2 files would be reformatted
+ruff_format_exit=1
+=== git diff check ===
+git_diff_check_exit=0
+=== import/openapi inventory ===
+import_ok=1
+route_count= 71
+paths= 50
+missing_symbols= ['WORKERS_FILE', 'log', '_reconcile_active_jobs', '_pick_worker']
+import_inventory_exit=0

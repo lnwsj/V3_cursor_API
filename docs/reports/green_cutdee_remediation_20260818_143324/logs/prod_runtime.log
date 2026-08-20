@@ -1,0 +1,12 @@
+Final production runtime evidence 2026-08-18T07:46:13Z UTC:
+- v3-cursor-api-gateway.service: active/running, MainPID=2287055, NRestarts=0.
+- v3-cursor-api-worker.service: active/running, MainPID=2287051, NRestarts=0.
+- sj88-green-cutdee.service: active/running, MainPID=2285358, NRestarts=0, User=www-data.
+- nginx.service: active/running, MainPID=1421632, NRestarts=0.
+- Listeners: 127.0.0.1:21002, 127.0.0.1:8788, 127.0.0.1:8789 only.
+- SQLite PRAGMA integrity_check: ok.
+- schema_migrations phase2 checksum after compatibility upgrade: 730afc7827880aa226bdd33415b62f9b4873439bb091f192ee7cbb3c6cca4281.
+- Nginx nginx -t: syntax ok; no green.cutdee.com or green1.cutdee.com target warnings after backup/symlink cleanup.
+- Gateway /api/health: status=ok, healthy=4, enabled=4, configured=5, disabled=1, active_jobs=0.
+- Cluster: slots 1,2,3,5 healthy; slot 4 disabled because endpoint 103.253.73.29:55522 was unreachable.
+- Remote venv import/OpenAPI: `REMOTE_IMPORT_OK=True`, API version 1.1.1, `HTTPBearer` scheme present on `/api/outputs`, `/api/render/{tc}`, and `/api/download/{file_path}`.

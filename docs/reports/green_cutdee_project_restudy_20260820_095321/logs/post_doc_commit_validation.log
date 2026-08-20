@@ -1,0 +1,51 @@
+=== post-doc-commit current worktree ===
+## refactor-base
+ M CLAUDE.md
+ M README.md
+ M docs/README_TH.md
+ M docs/V3_CURSOR_API_CURRENT_STATE_AUDIT_TH.md
+ M docs/V3_CURSOR_API_DEVELOPMENT_GUIDE_TH.md
+ M docs/V3_CURSOR_API_OPERATIONS_RUNBOOK_TH.md
+ M docs/V3_CURSOR_API_USER_GUIDE_TH.md
+?? .playwright-mcp/
+?? .ssh/
+?? docs/reports/
+ba921c0 docs: audit current Gateway refactor state
+=== current HEAD versus code baseline ===
+ README.md                                    |  62 ++++-------
+ docs/README_TH.md                            |  28 +++++
+ docs/V3_CURSOR_API_CURRENT_STATE_AUDIT_TH.md | 158 +++++++++++++++++++++++++++
+ docs/V3_CURSOR_API_DEEP_DIVE_TH.md           |   4 +-
+ docs/V3_CURSOR_API_DEVELOPMENT_GUIDE_TH.md   |  14 ++-
+ docs/V3_CURSOR_API_OPERATIONS_RUNBOOK_TH.md  |  10 +-
+ docs/V3_CURSOR_API_PIPELINE_GUIDE_TH.md      |   8 +-
+ docs/V3_CURSOR_API_USER_GUIDE_TH.md          |  20 +++-
+ docs/V3_MAC_M4_SPEED_BENCHMARK_TH.md         |  10 +-
+ 9 files changed, 257 insertions(+), 57 deletions(-)
+=== unit tests on current HEAD ===
+/Users/sj88/Documents/codex/V3_cursor_API/.venv/lib/python3.9/site-packages/pytest_asyncio/plugin.py:208: PytestDeprecationWarning: The configuration option "asyncio_default_fixture_loop_scope" is unset.
+The event loop scope for asynchronous fixtures will default to the fixture caching scope. Future versions of pytest-asyncio will default the loop scope for asynchronous fixtures to function scope. Set the default fixture loop scope explicitly in order to avoid unexpected behavior in the future. Valid fixture loop scopes are: "function", "class", "module", "package", "session"
+
+  warnings.warn(PytestDeprecationWarning(_DEFAULT_FIXTURE_LOOP_SCOPE_UNSET))
+.........................................F...                            [100%]
+=================================== FAILURES ===================================
+_________ test_submit_job_is_non_blocking_and_persists_terminal_state __________
+tests/unit/test_worker_lifecycle.py:40: in test_submit_job_is_non_blocking_and_persists_terminal_state
+    assert worker._load_persisted_state(job_id)["status"] == "succeeded"
+E   AssertionError: assert 'running' == 'succeeded'
+E     
+E     - succeeded
+E     + running
+=============================== warnings summary ===============================
+gateway/app/backend/routers/uploads.py:44
+  /Users/sj88/Documents/codex/V3_cursor_API/gateway/app/backend/routers/uploads.py:44: DeprecationWarning: `regex` has been deprecated, please use `pattern` instead
+    role: str = PathParam(..., regex="^(product|background|cover|audio|source|product_root)$"),
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/unit/test_worker_lifecycle.py::test_submit_job_is_non_blocking_and_persists_terminal_state
+pytest_exit=1
+=== compileall on current HEAD ===
+compileall_exit=0
+=== diff check ===
+git_diff_check_exit=0

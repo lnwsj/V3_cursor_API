@@ -1,0 +1,54 @@
+=== GET /healthz ===
+HTTP/2 200 
+date: Thu, 20 Aug 2026 02:58:55 GMT
+content-type: text/html
+server: cloudflare
+last-modified: Wed, 19 Aug 2026 11:47:38 GMT
+vary: Accept-Encoding
+speculation-rules: "/cdn-cgi/speculation"
+cache-control: no-cache, no-store, must-revalidate
+pragma: no-cache
+strict-transport-security: max-age=31536000; includeSubDomains
+x-content-type-options: nosniff
+x-frame-options: SAMEORIGIN
+referrer-policy: strict-origin-when-cross-origin
+report-to: {"group":"cf-nel","max_age":604800,"endpoints":[{"url":"https://a.nel.cloudflare.com/report/v4?s=V%2FgtzG5mVFY%2FjSMmZ5%2FGIKnvEljEpxBOrF1Hdpac8cWZBok2K7ioeFOlC2uAUXb5XeQDGhaZ0RyPazyLqb9qotqRFspYVBgcvjO0tSU%2B0kIRhKpwG0c3a%2FtaXAsrH9llPxveAJoqXWMiiZkRJ26G"}]}
+body_bytes=  204667
+body_sha256=9bf196e9ed18a337a2d162435f27467ccb61e2e451c3f2c797afe0f16b2b4098
+body_prefix=<!doctype html> <html lang="th"> <head> <meta charset="utf-8" /> <meta name="vie
+=== GET /openapi.json ===
+HTTP/2 200 
+date: Thu, 20 Aug 2026 02:58:55 GMT
+content-type: text/html
+server: cloudflare
+last-modified: Wed, 19 Aug 2026 11:47:38 GMT
+vary: Accept-Encoding
+speculation-rules: "/cdn-cgi/speculation"
+cache-control: no-cache, no-store, must-revalidate
+pragma: no-cache
+strict-transport-security: max-age=31536000; includeSubDomains
+x-content-type-options: nosniff
+x-frame-options: SAMEORIGIN
+referrer-policy: strict-origin-when-cross-origin
+report-to: {"group":"cf-nel","max_age":604800,"endpoints":[{"url":"https://a.nel.cloudflare.com/report/v4?s=TEs7P2w1K48SjjUTkdxPeP0lQC1oN1TqaklZz7xVKjRmJQ2JrB0QmyuVZFQiWIXY1NxNsN8elqSOxyxmekzUbg3u9pAvvejRD4MrWpimSUw7KfrluZaUX%2Btt4Gb03w1MM5A%2FNJm5GjjYZKaaw4%2Fb"}]}
+body_bytes=  204667
+body_sha256=5bd19769c1547c3958bcaa2110dc271f7d7668bff30487bdc7a3ab7513f09de1
+body_prefix=<!doctype html> <html lang="th"> <head> <meta charset="utf-8" /> <meta name="vie
+=== GET /api/openapi.json ===
+HTTP/2 404 
+date: Thu, 20 Aug 2026 02:58:56 GMT
+content-type: application/json
+content-length: 22
+server: cloudflare
+strict-transport-security: max-age=31536000; includeSubDomains
+x-content-type-options: nosniff
+x-frame-options: SAMEORIGIN
+referrer-policy: strict-origin-when-cross-origin
+cf-cache-status: DYNAMIC
+nel: {"report_to":"cf-nel","success_fraction":0.0,"max_age":604800}
+speculation-rules: "/cdn-cgi/speculation"
+report-to: {"group":"cf-nel","max_age":604800,"endpoints":[{"url":"https://a.nel.cloudflare.com/report/v4?s=VDvVfmSn3ca10%2FRlkKRWjbyVT97cs%2FeVw3N8WEdMD6XSikfsJVugSBj7uVsQHqIFuED2ONkH9Q%2BVe8UM5pKpBPLUQTJzrITsfRWYmT559Okbr%2Bn8W1O1tGJgyO4uJ5jwonU0puckjeWKcxP34LHE"}]}
+cf-ray: a2de239bff4c3e68-BKK
+body_bytes=      22
+body_sha256=37ec4665a8102d115ffd1ac20dae94c98b4dac64b0c1a68228aa2a531caeb35d
+body_prefix={"detail":"Not Found"}
