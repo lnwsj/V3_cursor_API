@@ -30,6 +30,13 @@ async def _reconcile_active_jobs() -> None:
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     _init_schema()
+    # Wire workers.json path (FIX 2026-08-20): init_workers uses relative path
+    # by default; this sets the absolute path so the gateway can find the file.
+    from app.backend.services.workers import init_config
+    init_config(
+        workers_file_path="/var/lib/v3-cursor-api/gateway/workers.json",
+        default_workers=[],
+    )
     init_workers()
     await _reconcile_active_jobs()
     yield
