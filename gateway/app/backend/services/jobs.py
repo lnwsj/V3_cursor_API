@@ -123,6 +123,11 @@ def list_live_jobs(limit: int = 100) -> List[Dict[str, Any]]:
             return list(cur.fetchall())
 
 
+
+def list_active_jobs(limit: int = 100) -> List[Dict[str, Any]]:
+    """All jobs currently in-flight (queued/running/cancelling) — used by lifespan reconcile (Phase 4 fix)."""
+    return list_live_jobs(limit=limit)
+
 # ---------------------------------------------------------------------------
 # Job status updates
 # ---------------------------------------------------------------------------
