@@ -1,9 +1,14 @@
 # V3 Cursor API: คู่มือ Developer
 
+> **Current source status:** `refactor-base / 25e1032` ทดสอบ unit ผ่าน แต่ Gateway runtime ยัง release-blocked. `45 passed` ไม่ได้แปลว่า lifespan, PostgreSQL, worker dispatch หรือ real-media E2E ผ่าน
+
 ## 1. โครงสร้างโค้ด
 
 ```text
-gateway/app/backend/main.py       Gateway API, auth, PG, worker dispatch
+gateway/app/backend/main.py       Gateway bootstrap/OpenAPI/router registration
+gateway/app/backend/routers/       Gateway auth/jobs/cluster/system/users/ws routes
+gateway/app/backend/services/      Gateway DB/user/job/worker/metrics services
+gateway/app/backend/templates/     HTML portal/status/dashboard templates
 worker/app/backend/main.py        Worker API, queue, job state
 worker/app/backend/core/contract.py
                                    settings validation และ TC defaults
@@ -16,6 +21,7 @@ worker/app/backend/core/media_probe.py
 worker/app/backend/core/pipelines/  TC01-TC06 entry points
 deploy/install.sh                  Linux installer และ service generation
 tests/                             unit/contract tests
+.github/workflows/ci.yml           CI workflow (currently non-blocking)
 ```
 
 ## 2. Prerequisites
@@ -81,6 +87,8 @@ bash -n deploy/install.sh
 - encoder fallback
 - duration/audio mapping
 
+หลังแก้ Gateway refactor ต้องเพิ่ม smoke tests สำหรับ import/lifespan, auth dependency, upload, worker selection/dispatch, status polling และ download proxy; ชุด unit ปัจจุบันยังไม่ครอบคลุม flow เหล่านี้
+
 ## 5. เพิ่มหรือแก้ Pipeline
 
 ลำดับที่ควรทำ:
@@ -95,6 +103,8 @@ bash -n deploy/install.sh
 8. เพิ่ม unit test และ dry-run behavior ถ้าเหมาะสม
 
 Pipeline ต้องไม่ถือว่า HTTP `202` เป็น render success เพราะ `202` หมายถึง enqueue สำเร็จเท่านั้น
+
+ใน source ปัจจุบัน `/api/render/{tc}` ยังเป็น compatibility echo handler และ `/api/{tc}/render` ยังไม่ถูก register; ต้องตรวจ route จาก `openapi.json` และทำ canary ก่อนเขียนตัวอย่างว่าใช้งานได้
 
 ## 6. Settings และ Compatibility
 
@@ -123,6 +133,8 @@ ffmpeg -hide_banner -h encoder=h264_videotoolbox
 - filter graph chromakey/despill/overlay อาจยังเป็น CPU แม้ encoder เป็น hardware
 - ทุก hardware path ต้องมี smoke test และ CPU fallback ที่ตรวจได้
 - อย่าเปิด CUDA filter path บน worker ที่ไม่มี CUDA filter capability
+
+บน M4 live ปัจจุบัน preferred encoder เป็น `hevc_videotoolbox`; H.264 benchmark เดิมเป็น historical result ของ `aa671b5`
 
 ## 8. Git และ Working Tree
 

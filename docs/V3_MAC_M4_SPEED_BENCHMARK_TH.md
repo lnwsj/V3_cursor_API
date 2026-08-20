@@ -2,6 +2,8 @@
 
 วันที่ทดสอบ: 2026-08-19 (เวลาไทย)
 
+> **Historical snapshot:** รายงานนี้เป็นผล acceptance ของ M4 ที่ release `aa671b5` โดยใช้ H.264 VideoToolbox. Live M4 snapshot ที่ตรวจเมื่อ 2026-08-20 ยัง healthy แต่ preferred encoder เปลี่ยนเป็น `hevc_videotoolbox`; ตัวเลขในรายงานนี้จึงไม่ใช่ HEVC baseline ปัจจุบัน
+
 ## Baseline ก่อน optimize
 
 Mac M4 worker (`m4-mlx`) ที่ release `f6299fa` ใช้ sequential TC02 และ CPU budget default 50%:
@@ -20,7 +22,7 @@ Mac M4 worker (`m4-mlx`) ที่ release `f6299fa` ใช้ sequential TC02 �
 | TC01 | 10 วินาที | 1 | 2.147 วินาที | succeeded |
 | TC02 | 10 วินาที | 21 | 34.692 วินาที | 21/21 สำเร็จ |
 
-ผล TC02 ใหม่เร็วกว่า baseline `154.805` วินาทีประมาณ `77.6%` และ logs ยืนยัน `h264_videotoolbox` กับ streaming `2+3`
+ผล TC02 ใหม่เร็วกว่า baseline `154.805` วินาทีประมาณ `77.6%` และ logs ยืนยัน `h264_videotoolbox` กับ streaming `2+3` ใน historical run
 
 ## Environment
 
@@ -28,7 +30,7 @@ Mac M4 worker (`m4-mlx`) ที่ release `f6299fa` ใช้ sequential TC02 �
 - Platform: Apple M4
 - Worker version: `1.2.0`
 - Release commit: `aa671b5`
-- Encoder: H.264 VideoToolbox พร้อม `-prio_speed 1`
+- Encoder ที่ทดสอบ: H.264 VideoToolbox พร้อม `-prio_speed 1`
 - Input resolution: `1280x720`
 - Input codec: H.264/AAC
 - Input duration: `10.000` วินาที
@@ -46,7 +48,9 @@ Mac M4 worker (`m4-mlx`) ที่ release `f6299fa` ใช้ sequential TC02 �
 - Poll `/v1/jobs/{job_id}/status` จนเป็น terminal state
 - ตรวจ output manifest
 - ใช้ `ffprobe` ตรวจ codec, resolution, duration และไฟล์ที่มีขนาดมากกว่าศูนย์
-- ตรวจ worker health ให้เป็น `vt_ready=true` และ preferred encoder เป็น `h264_videotoolbox`
+- ตรวจ worker health ให้เป็น `vt_ready=true` และ preferred encoder เป็น `h264_videotoolbox` ใน historical run
+
+Current live health ต้องตรวจซ้ำและคาดหวัง `hevc_videotoolbox` ตาม current-state audit
 
 การจับเวลาเริ่มหลัง upload เสร็จและเริ่ม render request จึงไม่รวม latency จาก public Gateway, network ภายนอก และ PostgreSQL
 

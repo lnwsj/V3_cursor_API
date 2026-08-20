@@ -2,6 +2,8 @@
 
 เอกสารนี้อธิบาย flow ที่แนะนำสำหรับ client ภายนอก โดยใช้ Gateway เป็นจุดเชื่อมต่อเดียว
 
+> **สถานะสำคัญ ณ 2026-08-20:** ตัวอย่างในเอกสารนี้เป็น target/accepted contract จาก release ก่อนหน้า ไม่ใช่หลักฐานว่า Gateway `refactor-base` ใช้งานได้แล้ว. Current refactor ยังมี release blockers ที่ upload, auth, dynamic render, dispatch และ download. อ่าน [`V3_CURSOR_API_CURRENT_STATE_AUDIT_TH.md`](V3_CURSOR_API_CURRENT_STATE_AUDIT_TH.md) ก่อนนำตัวอย่างไปใช้กับ environment ใด
+
 ## 1. ตั้งค่าพื้นฐาน
 
 ```bash
@@ -45,13 +47,12 @@ curl -fsS -X POST "$BASE/api/v1/auth/login" \
 
 บทบาทที่รองรับคือ `product`, `background`, `cover`, `audio`, `source` และ `product_root`
 
-### Recommended raw upload
+### Current extracted Gateway contract: multipart upload
 
 ```bash
 PRODUCT_JSON=$(curl -fsS -X POST "$BASE/api/v1/uploads/product" \
   "${AUTH[@]}" \
-  -H "X-Filename: product.mp4" \
-  --data-binary @product.mp4)
+  -F "file=@product.mp4;filename=product.mp4")
 
 PRODUCT_ID=$(printf '%s' "$PRODUCT_JSON" | python3 -c \
   'import json,sys; print(json.load(sys.stdin)["file_id"])')
@@ -68,7 +69,11 @@ Response สำคัญ:
 }
 ```
 
-อย่าสับสนกับ compatibility route `POST /api/jobs/upload` ซึ่งเป็น multipart และคืน field ชื่อ `id` แทน `file_id`
+Current extracted code รับ multipart field ชื่อ `file` และคืน `file_id`; อย่างไรก็ตาม audit ล่าสุดพบ `NameError` ใน upload handler ก่อนเขียนไฟล์ จึงต้องแก้และรัน upload smoke ก่อนถือว่า route นี้ใช้งานได้
+
+Production/legacy snapshot บางรุ่นเคยรับ raw request body และใช้ `X-Filename`; อย่านำสอง contract มาปะปนกัน
+
+อย่าสับสนกับ compatibility route `POST /api/jobs/upload` ซึ่งปัจจุบันคืน `files: []` เป็น placeholder
 
 ## 4. สร้างงานตาม pipeline
 
@@ -83,8 +88,7 @@ POST /api/{tc}/render
 ```bash
 BG_JSON=$(curl -fsS -X POST "$BASE/api/v1/uploads/background" \
   "${AUTH[@]}" \
-  -H "X-Filename: background.mp4" \
-  --data-binary @background.mp4)
+  -F "file=@background.mp4;filename=background.mp4")
 BG_ID=$(printf '%s' "$BG_JSON" | python3 -c \
   'import json,sys; print(json.load(sys.stdin)["file_id"])')
 
@@ -112,6 +116,8 @@ JOB_ID=$(printf '%s' "$JOB_JSON" | python3 -c \
 ```
 
 `files` ใช้ upload IDs จาก Gateway ไม่ใช่ชื่อไฟล์บนเครื่อง client
+
+หมายเหตุ: `/api/{tc}/render` เป็น target contract ของ Gateway รุ่นที่ทำ E2E แล้ว; source `refactor-base` ที่ audit ล่าสุดยังมีเพียง compatibility route `/api/render/{tc}` ซึ่งคืน echo payload และยังไม่ enqueue render จริง
 
 ### FormData compatibility route
 
@@ -192,6 +198,8 @@ POST /api/{tc}/dry-run
 ```
 
 Dry-run คำนวณจำนวน stage/output จาก settings แต่ไม่ probe media และไม่เรียก FFmpeg จึงใช้ตรวจ input mapping เบื้องต้นเท่านั้น
+
+ใน source `refactor-base` มี planner module แต่ยังไม่พบ HTTP `/api/{tc}/dry-run` route ที่ใช้งานได้ จึงอย่าใช้ตัวอย่าง dry-run เป็น health check ของ current Gateway
 
 Public health:
 

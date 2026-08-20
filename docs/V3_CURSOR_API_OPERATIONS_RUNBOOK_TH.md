@@ -2,6 +2,8 @@
 
 คู่มือสำหรับ deploy, monitor, canary และแก้ incident ใน production
 
+> **Release gate:** source `refactor-base / 25e1032` ยังห้าม deploy เป็น Gateway production จนกว่า current-state audit จะผ่าน P0 gates. Production Gateway ปัจจุบันยังเป็น `1.2.0 / f6299fa`
+
 ## 1. หลักการปฏิบัติ
 
 - Deploy release เดียวกันเป็นชุด อย่าแก้ไฟล์ใน production แบบไม่บันทึก release marker
@@ -33,11 +35,13 @@ curl -fsS "$WORKER_BASE/v1/active_jobs" \
 
 Health ที่ดีควรมี `ok=true`, worker อยู่ใน enabled registry, queue ไม่ค้าง และ encoder ที่ต้องการอยู่ใน `gpu.available` หรือ `encoder`
 
+Current live parity ที่ตรวจพบล่าสุดคือ Gateway `f6299fa`, M4 `aa671b5` และ preferred M4 encoder `hevc_videotoolbox`; อย่าใช้ H.264 benchmark เก่าเป็น HEVC SLA
+
 สำหรับ Apple Silicon ตรวจเพิ่มเติม:
 
 ```text
 gpu.vt_ready = true
-encoder[0] = h264_videotoolbox
+encoder[0] = hevc_videotoolbox (current M4; H.264 ก็รองรับ)
 encoder args มี -prio_speed 1 เมื่อเปิด optimized profile
 ```
 
@@ -63,6 +67,8 @@ sudo -E bash deploy/install.sh gateway
 ```
 
 ตรวจ Python version ด้วย `python3 --version`; project dependency ชุดปัจจุบันควรใช้ Python ไม่เกิน 3.13
+
+`deploy/install.sh` สร้าง systemd unit และ env file ตอนติดตั้ง ไม่ได้อ่าน service files จาก `deploy/systemd/` ที่อยู่ใน repository ดังนั้นให้ตรวจ generated unit และ env บน host จริงก่อน restart
 
 ### macOS LaunchAgent
 
@@ -126,6 +132,8 @@ curl -fsS -X PATCH "$GATEWAY_BASE/api/cluster/workers/m4-01" \
 อย่าลบ worker ที่มี active job โดยไม่ตรวจ job state ก่อน
 
 ## 5. Release และ Canary
+
+ห้ามเริ่มขั้นตอน canary หาก source เป็น `refactor-base` และยังไม่ผ่าน P0 ใน current-state audit
 
 1. ตรวจ `git status`, `git diff`, `git log` และยืนยันว่าไม่มี secret
 2. รัน `python3 -m pytest -q`
