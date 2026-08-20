@@ -1,7 +1,11 @@
+# Local artifacts
+.playwright-mcp/
+.ssh/
+*.bak
+*.bak.*
 __pycache__/
 *.pyc
-.venv/
-data/
-logs/
-*.bak
-.env
+.DS_Store
+
+# Refactor backups
+gateway/app/backend/main.py.bak.*
