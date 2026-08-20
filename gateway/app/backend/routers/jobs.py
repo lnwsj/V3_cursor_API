@@ -30,6 +30,7 @@ router = APIRouter()
 # ---------------------------------------------------------------------------
 class CreateJobRequest(BaseModel):
     mode: str
+    tc: Optional[str] = None  # FIX 2026-08-20: alias for mode (backward compat)
     files: Dict[str, List[str]]
     settings: Dict[str, Any] = Field(default_factory=dict)
     priority: Optional[int] = None
@@ -148,7 +149,7 @@ async def create_job(req: CreateJobRequest, user: str = Depends(_verify_user)):
     from app.backend.services.users import TIER_PRIORITY
 
     workers = load_workers()
-    worker = await _pick_worker(workers, job_priority=req.priority, required_tc=req.tc)
+    tc = req.tc or req.mode  # FIX: tc may not be set; fall back to mode
     if not worker:
         raise HTTPException(503, "no_worker_available")
 
