@@ -10,7 +10,7 @@ from typing import Any, Dict, List, Optional
 from fastapi import APIRouter, File, Form, HTTPException, Path as PathParam, Query, Request, UploadFile, Depends
 from pydantic import BaseModel, Field
 
-from app.backend.deps import (
+from ..deps import (
     DATA_DIR,
     INTERNAL_TOKEN,
     MAX_UPLOAD_BYTES,
@@ -22,9 +22,9 @@ from app.backend.deps import (
     _verify_internal,
     _verify_user,
 )
-from app.backend.services.db import pg_cursor as _pg_cursor
-from app.backend.services.workers import load_workers
-from app.backend.services.jobs import (
+from ..services.db import pg_cursor as _pg_cursor
+from ..services.workers import load_workers
+from ..services.jobs import (
     TERMINAL_JOB_STATUSES,
     canonical_status,
     get_job,
@@ -35,8 +35,8 @@ from app.backend.services.jobs import (
     output_names,
     record_worker_status,
 )
-from app.backend.services.users import get_user_tier, session_key_register
-from app.backend.services.workers import load_workers
+from ..services.users import get_user_tier, session_key_register
+from ..services.workers import load_workers
 
 
 router = APIRouter()

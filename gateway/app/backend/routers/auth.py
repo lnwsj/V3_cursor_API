@@ -11,7 +11,7 @@ from typing import Optional
 from fastapi import APIRouter, Cookie, Depends, Header, HTTPException, Request, Response
 from pydantic import BaseModel
 
-from app.backend.deps import (
+from ..deps import (
     ADMIN_API_KEY,
     INTERNAL_TOKEN,
     SESSION_COOKIE_NAME as _SESSION_COOKIE_NAME,
@@ -20,7 +20,7 @@ from app.backend.deps import (
     _user_for_token,
     _verify_user,
 )
-from app.backend.services.users import (
+from ..services.users import (
     SESSION_KEYS,
     TIER_PRIORITY,
     auto_register_admin,

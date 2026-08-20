@@ -9,9 +9,9 @@ from typing import Any, Dict
 from fastapi import APIRouter, Cookie, Header, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.routing import APIWebSocketRoute
 
-from app.backend.deps import INTERNAL_TOKEN
-from app.backend.services.jobs import get_job_owner
-from app.backend.services.users import SESSION_KEYS, is_admin as _is_admin
+from ..deps import INTERNAL_TOKEN
+from ..services.jobs import get_job_owner
+from ..services.users import SESSION_KEYS, is_admin as _is_admin
 
 
 router = APIRouter()

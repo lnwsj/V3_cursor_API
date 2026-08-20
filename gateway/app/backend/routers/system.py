@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 
-from app.backend.deps import _verify_user, _verify_internal
+from ..deps import _verify_user, _verify_internal
 GATEWAY_PORT = 8788  # gateway listen port (FIX Phase 3.2)
 
 

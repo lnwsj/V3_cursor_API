@@ -2,8 +2,8 @@
 from fastapi import APIRouter, Depends
 from fastapi.responses import HTMLResponse
 
-from app.backend.deps import INTERNAL_TOKEN, _verify_internal, _verify_user
-from app.backend.templates.pages import (
+from ..deps import INTERNAL_TOKEN, _verify_internal, _verify_user
+from ..templates.pages import (
     _APP_HTML,
     _JOB_DETAIL_HTML,
     _JOBS_HTML,

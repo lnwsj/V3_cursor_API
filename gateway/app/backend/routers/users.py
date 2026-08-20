@@ -3,9 +3,9 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends
 
-from app.backend.deps import _verify_user
-from app.backend.services.jobs import list_active_for_user, list_user_jobs
-from app.backend.services.users import get_user_full
+from ..deps import _verify_user
+from ..services.jobs import list_active_for_user, list_user_jobs
+from ..services.users import get_user_full
 
 
 router = APIRouter()

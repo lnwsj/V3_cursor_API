@@ -5,14 +5,14 @@ from typing import Any, Dict, List
 
 from fastapi import APIRouter, Depends, HTTPException
 
-from app.backend.deps import _is_admin, _verify_internal, _verify_user
-from app.backend.services.metrics import (
+from ..deps import _is_admin, _verify_internal, _verify_user
+from ..services.metrics import (
     anonymize_workers,
     job_metrics,
     live_jobs_feed,
     public_metrics_view,
 )
-from app.backend.services.workers import (
+from ..services.workers import (
     add_worker as _add_worker,
     init_workers,
     load_workers,

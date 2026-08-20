@@ -9,7 +9,7 @@ from typing import Optional
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Path as PathParam, UploadFile
 
-from app.backend.deps import DATA_DIR, MAX_UPLOAD_BYTES, SAFE_FILE_ID, UPLOADS_DIR, _verify_user
+from ..deps import DATA_DIR, MAX_UPLOAD_BYTES, SAFE_FILE_ID, UPLOADS_DIR, _verify_user
 
 
 router = APIRouter()
