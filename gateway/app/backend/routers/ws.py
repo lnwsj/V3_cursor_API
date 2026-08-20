@@ -2,12 +2,10 @@
 from __future__ import annotations
 
 import asyncio
-import json
 import time
 from typing import Any, Dict
 
-from fastapi import APIRouter, Cookie, Header, HTTPException, WebSocket, WebSocketDisconnect
-from fastapi.routing import APIWebSocketRoute
+from fastapi import APIRouter, HTTPException, WebSocket, WebSocketDisconnect
 
 from ..deps import INTERNAL_TOKEN
 from ..services.jobs import get_job_owner

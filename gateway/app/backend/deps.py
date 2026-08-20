@@ -5,16 +5,21 @@ Re-exports common auth primitives from services.users to keep router imports tid
 """
 from __future__ import annotations
 
-import hmac
 import os
 import re
 from pathlib import Path
 from typing import Optional
 
 from fastapi import Cookie, Depends, Header, HTTPException, Security
-from fastapi.security import HTTPBasic, HTTPBearer
+from fastapi.security import HTTPBearer
 
-from pathlib import Path
+from .services.users import (
+    SESSION_COOKIE_NAME,
+    TIER_PRIORITY,
+    is_admin as _is_admin,
+    resolve_token_to_user as _user_for_token,
+)
+
 
 # ---------------------------------------------------------------------------
 # File storage (data dir + uploads)
@@ -26,14 +31,6 @@ OUTPUTS_DIR = DATA_DIR / "outputs"
 MAX_UPLOAD_BYTES = max(1, int(os.getenv("GATEWAY_MAX_UPLOAD_BYTES", str(200 * 1024 * 1024))))
 SAFE_FILE_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,160}$")
 SAFE_OUTPUT_NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,254}$")
-
-from .services.users import (
-    SESSION_KEYS as _SESSION_KEYS,
-    SESSION_COOKIE_NAME,
-    TIER_PRIORITY,
-    is_admin as _is_admin,
-    resolve_token_to_user as _user_for_token,
-)
 
 
 # Env-driven credentials
@@ -83,10 +80,6 @@ def _verify_internal(x_cutdee_internal: Optional[str] = Header(None)) -> bool:
     if not INTERNAL_TOKEN or not x_cutdee_internal or x_cutdee_internal != INTERNAL_TOKEN:
         raise HTTPException(status_code=401, detail="invalid or missing X-Cutdee-Internal header")
     return True
-
-
-def _is_admin(user: str) -> bool:
-    return user == "admin"
 
 
 def _get_user_tier(user: str):

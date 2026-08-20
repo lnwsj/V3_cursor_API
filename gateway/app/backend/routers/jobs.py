@@ -1,42 +1,25 @@
 """Jobs router (Phase 3.2)."""
 from __future__ import annotations
 
-import os
-import re
 import secrets
 import time
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, File, Form, HTTPException, Path as PathParam, Query, Request, UploadFile, Depends
+from fastapi import APIRouter, HTTPException, Request, Depends
 from pydantic import BaseModel, Field
 
 from ..deps import (
-    DATA_DIR,
-    INTERNAL_TOKEN,
-    MAX_UPLOAD_BYTES,
-    SAFE_FILE_ID,
-    SAFE_OUTPUT_NAME,
-    UPLOADS_DIR,
     _is_admin,
-    _require_admin,
-    _verify_internal,
     _verify_user,
 )
-from ..services.db import pg_cursor as _pg_cursor
 from ..services.workers import load_workers
 from ..services.jobs import (
-    TERMINAL_JOB_STATUSES,
-    canonical_status,
     get_job,
-    get_job_owner,
-    increment_retry,
     list_user_jobs,
     mark_job_failed,
-    output_names,
-    record_worker_status,
 )
-from ..services.users import get_user_tier, session_key_register
-from ..services.workers import load_workers
+from ..services.users import get_user_tier
+from ..services.workers import _pick_worker
 
 
 router = APIRouter()

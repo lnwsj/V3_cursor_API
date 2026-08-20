@@ -9,7 +9,7 @@ import secrets
 import time
 from typing import Any, Dict, Optional, Tuple
 
-from fastapi import Header, HTTPException, Response
+from fastapi import HTTPException, Response
 
 from .db import pg_conn
 

@@ -2,31 +2,19 @@
 from __future__ import annotations
 
 import hashlib
-import os
-import re
-import secrets
 import time
 from typing import Optional
 
-from fastapi import APIRouter, Cookie, Depends, Header, HTTPException, Request, Response
+from fastapi import APIRouter, Depends, Header, HTTPException, Request, Response
 from pydantic import BaseModel
 
 from ..deps import (
-    ADMIN_API_KEY,
-    INTERNAL_TOKEN,
     SESSION_COOKIE_NAME as _SESSION_COOKIE_NAME,
-    _get_user_tier,
-    _is_admin,
     _user_for_token,
     _verify_user,
 )
 from ..services.users import (
-    SESSION_KEYS,
-    TIER_PRIORITY,
-    auto_register_admin,
-    auto_register_user,
     change_password as _change_password,
-    clear_session_cookie,
     create_user,
     email_normalize,
     generate_api_key,
@@ -36,7 +24,6 @@ from ..services.users import (
     set_session_cookie,
     session_key_clear,
     session_key_register,
-    update_last_login,
     update_user_profile,
     validate_email,
     verify_password,

@@ -1,9 +1,9 @@
 """System router (Phase 3.2)."""
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException
 
-from ..deps import _verify_user, _verify_internal
+from ..deps import _verify_user
 GATEWAY_PORT = 8788  # gateway listen port (FIX Phase 3.2)
 
 
@@ -58,8 +58,6 @@ async def api_config():
 
 @router.get("/api/outputs")
 async def api_outputs():
-    from pathlib import Path
-    import os
     from app.backend.deps import OUTPUTS_DIR
     if not OUTPUTS_DIR.exists():
         return {"ok": True, "files": []}

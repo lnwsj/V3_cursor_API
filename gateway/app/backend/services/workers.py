@@ -3,12 +3,10 @@ from __future__ import annotations
 
 import asyncio
 import json
-import secrets
 from typing import Any, Dict, List, Optional
 
 import httpx
 
-from .db import pg_conn
 
 
 # ---------------------------------------------------------------------------
@@ -253,3 +251,43 @@ async def probe_all_workers_with_inflight(workers: List[Dict[str, Any]],
             "error": h.get("error"),
         })
     return enriched
+
+
+# ---------------------------------------------------------------------------
+# Worker selection (FIX 2026-08-20): the old `_pick_worker` lived in main.py
+# and was never moved into services during the Phase 1-3 refactor. Routers
+# import it via `from ..services.workers import _pick_worker`.
+# ---------------------------------------------------------------------------
+async def _pick_worker(
+    workers: List[Dict[str, Any]],
+    job_priority: Optional[int] = None,
+    required_tc: Optional[str] = None,
+) -> Optional[Dict[str, Any]]:
+    """Pick the best worker: enabled, healthy, lowest active_jobs under max_concurrent.
+
+    Considers ``job_priority`` (higher = prefer high tier) and ``required_tc``
+    (skip workers that don't support the requested TC). Returns ``None`` if no
+    worker is available.
+    """
+    candidates = [w for w in workers if w.get("enabled", True)]
+    if required_tc:
+        candidates = [w for w in candidates if required_tc in (w.get("supported_tcs") or []) or not w.get("supported_tcs")]
+    if not candidates:
+        return None
+
+    # Filter out workers at capacity (need in-flight counts; assume probe_all_workers data).
+    candidates = [w for w in candidates if w.get("active_jobs", 0) < w.get("max_concurrent", 1)]
+
+    if not candidates:
+        return None
+
+    # Tier priority: high > mid > low. Within a tier, prefer lowest active_jobs.
+    tier_rank = {"high": 0, "mid": 1, "low": 2}
+    candidates.sort(
+        key=lambda w: (
+            tier_rank.get(w.get("tier", "low"), 2),
+            w.get("active_jobs", 0),
+            -(job_priority or 0),
+        )
+    )
+    return candidates[0]

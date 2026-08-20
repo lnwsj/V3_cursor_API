@@ -1,15 +1,13 @@
 """Uploads router (Phase 2.5)."""
 from __future__ import annotations
 
-import os
-import re
 import time
 from pathlib import Path
 from typing import Optional
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, Path as PathParam, UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, Path as PathParam, UploadFile
 
-from ..deps import DATA_DIR, MAX_UPLOAD_BYTES, SAFE_FILE_ID, UPLOADS_DIR, _verify_user
+from ..deps import MAX_UPLOAD_BYTES, SAFE_FILE_ID, UPLOADS_DIR, _verify_user
 
 
 router = APIRouter()
@@ -56,7 +54,6 @@ async def api_v1_uploads_role(
         raise HTTPException(status_code=413, detail="upload too large")
     UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
     suffix = _upload_suffix(file.filename, role)
-    file_id = f"{role}_{int(time.time() * 1000)}_{secrets_token_hex()}{suffix}".replace("secrets", "")
     import secrets as _sec
     file_id = f"{role}_{int(time.time() * 1000)}_{_sec.token_hex(8)}{suffix}"
     out_path = UPLOADS_DIR / file_id

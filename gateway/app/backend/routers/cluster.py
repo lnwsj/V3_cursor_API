@@ -1,11 +1,12 @@
 """Cluster router (Phase 3.2)."""
 from __future__ import annotations
 
-from typing import Any, Dict, List
+from typing import Any, Dict
 
 from fastapi import APIRouter, Depends, HTTPException
 
-from ..deps import _is_admin, _verify_internal, _verify_user
+from ..deps import _verify_internal
+from ..services.jobs import list_live_jobs
 from ..services.metrics import (
     anonymize_workers,
     job_metrics,
@@ -19,7 +20,6 @@ from ..services.workers import (
     probe_all_workers,
     probe_all_workers_with_inflight,
     remove_worker,
-    save_workers,
     update_worker as _update_worker,
     worker_health,
 )
@@ -67,7 +67,6 @@ async def cluster_workers_add(worker: Dict[str, Any]):
 
 @router.patch("/api/cluster/workers/{worker_id}")
 async def cluster_workers_update(worker_id: str, fields: Dict[str, Any]):
-    workers = load_workers()
     updated = _update_worker(worker_id, **fields)
     if not updated:
         raise HTTPException(404, f"worker '{worker_id}' not found")
