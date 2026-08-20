@@ -15,7 +15,28 @@ Live deployment lives behind nginx at `https://green.cutdee.com/v3api/...` (path
 
 ## Commands
 
-There is no test suite, linter, or Makefile — the project is small enough to drive with `uvicorn` directly.
+The project is small enough to drive with `uvicorn` directly. There is a unit test suite (`pytest`) and `ruff` for the two entrypoint files; they run in CI but are not the main loop.
+
+### Tests + lint
+
+```bash
+# Install test/lint deps (adds pytest, pytest-cov, pytest-asyncio, ruff, mypy, httpx)
+pip install -r requirements-dev.txt
+
+# Run the unit tests
+pytest tests/unit -v
+# Run a single test file
+pytest tests/unit/test_planner.py -v
+# Run a single test
+pytest tests/unit/test_planner.py::test_tc02_plans_lens_matrix -v
+
+# Lint the two entrypoint files (matches CI)
+ruff check gateway/app/backend/main.py worker/app/backend/main.py
+ruff format --check gateway/app/backend/main.py worker/app/backend/main.py
+```
+
+Test config: `pytest.ini` (testpaths=tests, asyncio_mode=auto, `slow`/`integration` markers).
+CI: `.github/workflows/ci.yml` (Python 3.12, pytest + ruff on the two main entrypoints only).
 
 ### Install / deploy (systemd, single host dev)
 
@@ -70,6 +91,24 @@ tail -f /var/log/v3-cursor-api/worker.log
 Per-job data is at `/var/lib/v3-cursor-api/worker/jobs/{job_id}/`; cleanup is `/v1/admin/cleanup?days=N` (internal only).
 
 ## Architecture
+
+### Gateway layout
+
+The gateway has been refactored (Phase 1–3) out of one ~2k-line `main.py` into a layout you should default to:
+
+- `gateway/app/backend/main.py` — wiring only: FastAPI app construction, static-file mount, lifespan startup (`_init_schema`, etc.), and the `if __name__ == "__main__": uvicorn.run(...)` block.
+- `gateway/app/backend/deps.py` — shared `Depends(...)` factories (DB pool, internal-token verify, current user, etc.).
+- `gateway/app/backend/services/` — side-effecting modules: `db.py` (PG pool + queries), `jobs.py` (job-state reads/writes), `users.py`, `workers.py` (worker registry + dispatch), `metrics.py`. Pure functions and persistence belong here.
+- `gateway/app/backend/routers/` — one file per resource, all wired from `main.py`: `auth.py`, `cluster.py`, `jobs.py`, `pages.py`, `system.py`, `uploads.py`, `users.py`, `ws.py`. New endpoints should land in a router here, not in `main.py`.
+- `gateway/app/backend/templates/` — extracted HTML for the page routes (formerly inline in `main.py`).
+- `gateway/app/backend/planner.py` — `plan_tc(...)` / `composition_count(...)` for TC02-TC06 expansion into individual renders.
+- `gateway/app/backend/users/`, `gateway/app/backend/workers/` — file-backed registries (operators edit `data/gateway/workers.json`).
+
+When asked to "add an endpoint to the gateway", reach for `routers/<topic>.py` + a service in `services/` first; only touch `main.py` for app wiring or new lifespan hooks.
+
+### Worker layout
+
+The worker is still a single `worker/app/backend/main.py` (~39KB FastAPI app) on top of the vendored `core/`. New pipeline code goes in `core/pipelines/` (see `worker/app/backend/core/pipelines/tc0N_*.py` and `_common.py`); new settings factories go in `core/contract.py`.
 
 ### Request flow
 
@@ -166,3 +205,9 @@ Then `POST /api/cluster/workers/reload` with the `X-Cutdee-Internal` header. `_p
 - `CUTDEE_INTERNAL_TOKEN` defaults to `dev-internal-token-change-me` in **both** processes; if you forget to set it on either side, internal RPC silently 401s.
 - `Output_files` filtering — workers prefix uploaded files with `background_`, `product_`, `source_`, `cover_`, `audio_`. The output discovery loop in `_run_tc_pipeline` excludes them unless they contain `__lens*__tc*__` (TC02/TC05 reframe markers), which is how it separates inputs from outputs.
 - The `api_render_tc` handler at `/api/render/{tc}` and the dynamic `/api/{tc}/render` endpoints both upload files to the worker under the role name. Don't confuse the gateway's filename minting with the worker's — the gateway always uses `.mp4`; the worker uses whatever the gateway sends in `Content-Disposition`.
+
+## Docs
+
+- `README.md` — public-facing quick start, prod setup, nginx vhost, E2E curl, env vars.
+- `docs/README_TH.md` — index of the Thai role-based guides (user / pipeline / ops / dev / deep-dive).
+- `docs/reports/` — dated deep-dive reports (`<topic>_<YYYYMMDD_HHMMSS>/`); each folder is a self-contained investigation, not a permanent doc.

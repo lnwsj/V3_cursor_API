@@ -1,0 +1,14 @@
+{
+  "request_id": "TC_AUTH_GUARD_UI_001-outputs-20260818T0746Z",
+  "method": "GET",
+  "url": "https://green.cutdee.com/api/outputs",
+  "headers": {
+    "Accept": "application/json",
+    "Authorization": "ABSENT"
+  },
+  "body": null,
+  "ui_binding": {
+    "screenshots": ["screenshots/01_open_page.png", "screenshots/03_click_generate.png"],
+    "expected_guard": "gallery requires token and render is disabled without required files"
+  }
+}

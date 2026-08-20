@@ -1,0 +1,158 @@
+{
+  "report_id": "green_cutdee_upload_flow_study_20260818_163216",
+  "project_id": "green.cutdee.com",
+  "mode": "read_only_study",
+  "testcases": [
+    {
+      "id": "STUDY-TC01",
+      "name": "Home upload contract + gateway health",
+      "ui_screenshots": [
+        "screenshots/01_open_page.png",
+        "screenshots/02_input_ready.png",
+        "screenshots/01_home_upload_zones.png"
+      ],
+      "api": {
+        "request": "api/TC01_home_health/request.json",
+        "response": "api/TC01_home_health/response.json",
+        "timing": "api/TC01_home_health/timing.json"
+      },
+      "pair": "pairs/pair_home_health__binding.json",
+      "assertions": [
+        "home page is HTTP 200 and renders Product/Background upload zones",
+        "Render is disabled with zero files",
+        "public health returns gateway version and aggregate worker state"
+      ],
+      "functional_render_status": "NOT_EVALUATED",
+      "verdict": "PASS_WITH_SCOPE_NOTE"
+    },
+    {
+      "id": "STUDY-TC05",
+      "name": "TC05 source upload contract + OpenAPI route",
+      "ui_screenshots": [
+        "screenshots/02_tc05_upload_contract.png",
+        "screenshots/02_input_ready.png"
+      ],
+      "api": {
+        "request": "api/TC05_openapi_contract/request.json",
+        "response": "api/TC05_openapi_contract/response.json",
+        "timing": "api/TC05_openapi_contract/timing.json"
+      },
+      "pair": "pairs/pair_tc05_openapi__binding.json",
+      "assertions": [
+        "TC05 Product is the source video",
+        "TC05 does not require Background/Audio/Cover",
+        "public OpenAPI confirms multipart render and authenticated output routes"
+      ],
+      "functional_render_status": "NOT_EVALUATED",
+      "verdict": "PASS_WITH_SCOPE_NOTE"
+    },
+    {
+      "id": "STUDY-TC06",
+      "name": "TC06 multi-product + master audio contract + auth guard",
+      "ui_screenshots": [
+        "screenshots/03_tc06_upload_contract.png",
+        "screenshots/05_audio_ready_or_error.png",
+        "screenshots/03_click_generate.png"
+      ],
+      "api": {
+        "request": "api/TC06_render_auth/request.json",
+        "response": "api/TC06_render_auth/response.json",
+        "timing": "api/TC06_render_auth/timing.json"
+      },
+      "pair": "pairs/pair_tc06_auth__binding.json",
+      "assertions": [
+        "TC06 requires Product + Background + Audio in UI",
+        "unauthenticated render is HTTP 401",
+        "no media was sent and no job was created"
+      ],
+      "functional_render_status": "NOT_EVALUATED",
+      "verdict": "PASS_WITH_SCOPE_NOTE"
+    },
+    {
+      "id": "STUDY-TC07",
+      "name": "Output page + authenticated gallery guard",
+      "ui_screenshots": [
+        "screenshots/04_output_token_guard.png",
+        "screenshots/05_outputs_page_token_guard.png",
+        "screenshots/04_result_state.png"
+      ],
+      "api": {
+        "request": "api/TC07_outputs_auth/request.json",
+        "response": "api/TC07_outputs_auth/response.json",
+        "timing": "api/TC07_outputs_auth/timing.json"
+      },
+      "pair": "pairs/pair_outputs_guard__binding.json",
+      "assertions": [
+        "/outputs/ static shell is reachable",
+        "UI displays token-required guard",
+        "unauthenticated /api/outputs is HTTP 401"
+      ],
+      "functional_render_status": "NOT_EVALUATED",
+      "verdict": "PASS_WITH_SCOPE_NOTE"
+    },
+    {
+      "id": "STUDY-TC08",
+      "name": "Cluster aggregate health and encoder boundary",
+      "ui_screenshots": [
+        "screenshots/01_open_page.png"
+      ],
+      "api": {
+        "request": "api/TC08_cluster_health/request.json",
+        "response": "api/TC08_cluster_health/response.json",
+        "timing": "api/TC08_cluster_health/timing.json"
+      },
+      "pair": "pairs/pair_cluster_health__binding.json",
+      "assertions": [
+        "cluster endpoint is HTTP 200",
+        "captured public state is 3 enabled and healthy, 2 disabled",
+        "aggregate h264_nvenc does not prove the selected job ran on NVENC"
+      ],
+      "functional_render_status": "NOT_EVALUATED",
+      "verdict": "PASS_WITH_SCOPE_NOTE"
+    },
+    {
+      "id": "STUDY-TC09",
+      "name": "Closeout health and volatile worker registry snapshot",
+      "ui_screenshots": [
+        "screenshots/01_open_page.png"
+      ],
+      "api": {
+        "request": "api/TC09_closeout_health/request.json",
+        "response": "api/TC09_closeout_health/response.json",
+        "timing": "api/TC09_closeout_health/timing.json"
+      },
+      "pair": "pairs/pair_closeout_health__binding.json",
+      "assertions": [
+        "closeout public health is HTTP 200",
+        "final closeout state is enabled 4, healthy 3, disabled 1",
+        "worker registry changed during the study and must be treated as runtime state"
+      ],
+      "functional_render_status": "NOT_EVALUATED",
+      "verdict": "PASS_WITH_SCOPE_NOTE"
+    }
+  ],
+  "required_ui_checkpoint_aliases": [
+    "screenshots/01_open_page.png",
+    "screenshots/02_input_ready.png",
+    "screenshots/03_click_generate.png",
+    "screenshots/04_result_state.png",
+    "screenshots/05_audio_ready_or_error.png"
+  ],
+  "gate_results": {
+    "pair_completeness": {
+      "passed": 6,
+      "total": 6,
+      "percent": 100
+    },
+    "pair_consistency": {
+      "passed": 6,
+      "total": 6,
+      "percent": 100
+    },
+    "checks_passed": 30,
+    "checks_total": 30,
+    "critical_errors": 0,
+    "required_artifacts_exist": true,
+    "functional_upload_render_download": "NOT_EVALUATED"
+  }
+}

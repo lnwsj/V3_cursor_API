@@ -1,0 +1,5 @@
+{
+  "request_id": "TC_LEGACY_ROUTE_SUPPLEMENTAL_001-old-20260818T0746Z",
+  "http_status": 410,
+  "body_assertions": ["HTTP 410 Gone", "nginx response", "legacy proxy not exposed"]
+}

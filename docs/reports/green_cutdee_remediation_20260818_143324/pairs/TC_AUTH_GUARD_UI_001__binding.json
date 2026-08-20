@@ -1,0 +1,24 @@
+{
+  "pair_id": "TC_AUTH_GUARD_UI_001",
+  "screenshot_list": [
+    "screenshots/01_open_page.png",
+    "screenshots/02_input_ready.png",
+    "screenshots/03_click_generate.png",
+    "screenshots/04_result_state.png",
+    "screenshots/05_audio_ready_or_error.png"
+  ],
+  "request_files": ["api/TC_AUTH_GUARD_UI_001/request.json"],
+  "response_files": ["api/TC_AUTH_GUARD_UI_001/response.json"],
+  "timing_files": ["api/TC_AUTH_GUARD_UI_001/timing.json"],
+  "request_id": "TC_AUTH_GUARD_UI_001-outputs-20260818T0746Z",
+  "mode": "tc01",
+  "text_hash": "sha256:no-bearer-token",
+  "consistency_checks": {
+    "ui_gallery_token_required_matches_api_401": true,
+    "ui_api_token_button_visible": true,
+    "render_button_disabled_without_required_files": true,
+    "no_false_result_state": true,
+    "api_response_not_200": true
+  },
+  "pair_verdict": "PASS"
+}

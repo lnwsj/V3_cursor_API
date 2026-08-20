@@ -1,0 +1,10 @@
+{
+  "method": "POST",
+  "url": "https://green.cutdee.com/api/tc06/render",
+  "headers": {
+    "Accept": "application/json"
+  },
+  "body": null,
+  "files_uploaded": false,
+  "auth": "none; intentionally omitted to verify guard"
+}

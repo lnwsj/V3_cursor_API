@@ -1,0 +1,24 @@
+{
+  "pair_id": "TC_MODE_MATRIX_UI_001",
+  "screenshot_list": [
+    "screenshots/tc02_input_ready.png",
+    "screenshots/tc03_input_ready.png",
+    "screenshots/tc04_input_ready.png",
+    "screenshots/tc05_input_ready.png",
+    "screenshots/tc06_input_ready.png"
+  ],
+  "request_files": ["api/TC_MODE_MATRIX_UI_001/request.json"],
+  "response_files": ["api/TC_MODE_MATRIX_UI_001/response.json"],
+  "timing_files": ["api/TC_MODE_MATRIX_UI_001/timing.json"],
+  "request_id": "TC_MODE_MATRIX_UI_001-render-guard-20260818T0746Z",
+  "mode": ["tc02", "tc03", "tc04", "tc05", "tc06"],
+  "text_hash": "sha256:empty-input-state",
+  "consistency_checks": {
+    "all_five_mode_tabs_active": true,
+    "render_disabled_for_all_empty_modes": true,
+    "tc05_api_guard_401": true,
+    "tc06_api_guard_401": true,
+    "real_media_render_not_claimed": true
+  },
+  "pair_verdict": "PASS_WITH_SCOPE_NOTE"
+}

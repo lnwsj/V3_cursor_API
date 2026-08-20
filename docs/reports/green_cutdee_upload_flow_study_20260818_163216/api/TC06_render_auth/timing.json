@@ -1,0 +1,7 @@
+{
+  "request_id": "study-ui-tc06-20260818-163216",
+  "http_status": 401,
+  "time_total_sec": 0.203244,
+  "size_download_bytes": 30,
+  "measured_by": "curl -w"
+}

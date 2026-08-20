@@ -1,0 +1,8 @@
+{
+  "request_id": "TC_LEGACY_ROUTE_SUPPLEMENTAL_001-old-20260818T0746Z",
+  "method": "GET",
+  "url": "https://green.cutdee.com/old/",
+  "headers": {"Accept": "text/html"},
+  "body": null,
+  "ui_binding": {"screenshot": "screenshots/06_legacy_route_410.png"}
+}

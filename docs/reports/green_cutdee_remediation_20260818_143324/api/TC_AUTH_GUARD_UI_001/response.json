@@ -1,0 +1,5 @@
+{
+  "request_id": "TC_AUTH_GUARD_UI_001-outputs-20260818T0746Z",
+  "http_status": 401,
+  "body": {"detail": "invalid API token"}
+}

@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="th">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Green Cutdee Upload Flow Study</title>
+  <style>
+    :root{color-scheme:dark;--bg:#111827;--panel:#1f2937;--text:#e5e7eb;--muted:#9ca3af;--ok:#86efac;--warn:#fde68a;--line:#374151}
+    body{font-family:system-ui,-apple-system,Segoe UI,sans-serif;background:var(--bg);color:var(--text);line-height:1.6;margin:0}
+    main{max-width:1180px;margin:0 auto;padding:28px}
+    section{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:20px;margin:16px 0}
+    h1,h2{line-height:1.25} h1{font-size:28px} h2{font-size:20px}
+    code,pre{font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+    code{color:#bfdbfe} pre{background:#0b1220;padding:16px;border-radius:8px;overflow:auto}
+    table{border-collapse:collapse;width:100%;font-size:14px} th,td{border:1px solid var(--line);padding:8px;text-align:left;vertical-align:top} th{background:#111827}
+    .ok{color:var(--ok)} .warn{color:var(--warn)} .muted{color:var(--muted)}
+    .flow{font-size:14px} img{max-width:100%;border:1px solid var(--line);border-radius:8px;margin:6px}
+    a{color:#93c5fd}
+  </style>
+</head>
+<body>
+<main>
+  <h1>Green Cutdee: Upload → Worker → Job → Download</h1>
+  <p class="warn"><strong>Verdict:</strong> STUDY_COMPLETE_WITH_SCOPE_NOTE — functional upload/render/download = NOT_EVALUATED</p>
+
+  <section>
+    <h2>Project identity</h2>
+    <ul>
+      <li>Project: green.cutdee.com</li>
+      <li>Repo: /Users/sj88/Documents/codex/V3_cursor_API</li>
+      <li>Environment: production, read-only study</li>
+      <li>UI: V1.1.1; Gateway: 1.2.0; commit: f6299fa</li>
+      <li>Public UI: <a href="https://green.cutdee.com/">green.cutdee.com</a></li>
+      <li>OpenAPI: <a href="https://green.cutdee.com/v3api/openapi.json">/v3api/openapi.json</a></li>
+      <li>AI Full Dev activities: 12082, 12084, 12086 — recorded and closed via API</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>คำตอบสั้นที่สุด</h2>
+    <p>ไฟล์เข้า Browser → Nginx → Gateway บน dedicated server 103.253.75.161 → worker ที่ health ผ่านและโหลดต่ำสุด → FFmpeg. เครื่องที่ทำจริงจึงเปลี่ยนได้ตาม worker selection.</p>
+    <p>หลังคลิก Render ให้จด job_id แล้วเรียก authenticated <code>GET /api/job/&lt;JOB_ID&gt;</code>; ฟิลด์ <code>worker_id</code> คือจุดเริ่มต้นในการ map ไปยังเครื่องใน registry. UI ยังไม่แสดง worker id ต่อ job.</p>
+    <p>เมื่อเสร็จ UI ดาวน์โหลด <code>/api/job/&lt;JOB_ID&gt;/output</code> อัตโนมัติ; TC02–TC06 ดาวน์โหลด ZIP จาก <code>/api/job/&lt;JOB_ID&gt;/download-all</code>. Output page อยู่ที่ <code>/outputs/</code> และต้องมี token/session.</p>
+  </section>
+
+  <section>
+    <h2>Flow ที่ยืนยันจาก source/deploy</h2>
+    <pre class="flow">Browser FormData
+  → Nginx /api/ → 127.0.0.1:8788
+  → Gateway auth + stage /var/lib/v3-cursor-api/gateway/uploads
+  → choose enabled healthy worker
+  → INSERT PostgreSQL v3_jobs
+  → worker /v1/jobs/&lt;job&gt;/upload/&lt;role&gt;
+  → worker /v1/&lt;tc&gt;/render/&lt;job&gt;
+  → worker job dir + pipeline + FFmpeg
+  → gateway monitor /v1/jobs/&lt;job&gt;/status
+  → browser poll/WS + output download</pre>
+  </section>
+
+  <section>
+    <h2>Worker snapshot ล่าสุด</h2>
+    <table>
+      <thead><tr><th>Registry id</th><th>Endpoint / เครื่อง</th><th>สถานะ</th><th>Encoder</th></tr></thead>
+      <tbody>
+        <tr><td>i9-64gb-cpu-01</td><td>Dedicated 103.253.75.161, loopback 127.0.0.1:8789</td><td class="ok">enabled + healthy</td><td>libx264; self-id server-cpu-01</td></tr>
+        <tr><td>sj88-rtx5060ti-01</td><td>110.164.146.205:8789</td><td class="warn">disabled in final registry</td><td>h264_nvenc when directly probed</td></tr>
+        <tr><td>m4-mlx</td><td>103.253.73.29:55520</td><td class="ok">enabled + healthy</td><td>h264_videotoolbox</td></tr>
+        <tr><td>sj88ai-rtx2050-01</td><td>103.253.73.29:55522</td><td class="warn">enabled but unhealthy</td><td>no response in final probe</td></tr>
+        <tr><td>sjnb3050ti-rtx3050</td><td>103.253.73.29:55523</td><td class="ok">enabled + healthy</td><td>h264_nvenc</td></tr>
+      </tbody>
+    </table>
+    <p class="muted">Final closeout aggregate: enabled 4, healthy 3, configured 5, disabled 1. Registry changed repeatedly during the study; the final hash is recorded in the source logs.</p>
+  </section>
+
+  <section>
+    <h2>UI evidence</h2>
+    <p>ไม่อัปโหลดไฟล์และไม่ใส่ token. หน้าแรกแสดง Product/Background required, TC05 source-only, TC06 Product+Background+Audio, และ output token guard.</p>
+    <div>
+      <img src="screenshots/01_home_upload_zones.png" alt="Home upload zones">
+      <img src="screenshots/02_tc05_upload_contract.png" alt="TC05 upload contract">
+      <img src="screenshots/03_tc06_upload_contract.png" alt="TC06 upload contract">
+      <img src="screenshots/04_output_token_guard.png" alt="Output token guard">
+      <img src="screenshots/05_outputs_page_token_guard.png" alt="Outputs page token guard">
+    </div>
+    <p>Checkpoint aliases: <a href="screenshots/01_open_page.png">01_open_page</a>,
+      <a href="screenshots/02_input_ready.png">02_input_ready</a>,
+      <a href="screenshots/03_click_generate.png">03_click_generate</a>,
+      <a href="screenshots/04_result_state.png">04_result_state</a>,
+      <a href="screenshots/05_audio_ready_or_error.png">05_audio_ready_or_error</a>.
+      These are guard/contract observations, not a completed render.</p>
+  </section>
+
+  <section>
+    <h2>Paired test gates</h2>
+    <table>
+      <thead><tr><th>Testcase</th><th>API result</th><th>Pair</th><th>Verdict</th></tr></thead>
+      <tbody>
+        <tr><td>STUDY-TC01 home + health</td><td>HTTP 200</td><td>complete</td><td>PASS_WITH_SCOPE_NOTE</td></tr>
+        <tr><td>STUDY-TC05 contract + OpenAPI</td><td>HTTP 200</td><td>complete</td><td>PASS_WITH_SCOPE_NOTE</td></tr>
+        <tr><td>STUDY-TC06 auth guard</td><td>HTTP 401 without auth</td><td>complete</td><td>PASS_WITH_SCOPE_NOTE</td></tr>
+        <tr><td>STUDY-TC07 output guard</td><td>HTTP 401 without auth</td><td>complete</td><td>PASS_WITH_SCOPE_NOTE</td></tr>
+        <tr><td>STUDY-TC08 cluster health</td><td>HTTP 200</td><td>complete</td><td>PASS_WITH_SCOPE_NOTE</td></tr>
+        <tr><td>STUDY-TC09 closeout health/drift</td><td>HTTP 200</td><td>complete</td><td>PASS_WITH_SCOPE_NOTE</td></tr>
+      </tbody>
+    </table>
+    <ul>
+      <li>Pair completeness: 6/6 = 100%</li>
+      <li>Pair consistency: 6/6 = 100%</li>
+      <li>Checks: 30/30</li>
+      <li>Critical errors: 0</li>
+      <li>Real upload/render/output download: NOT_EVALUATED</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>หลักฐานในชุดรายงาน</h2>
+    <ul>
+      <li><a href="report.md">report.md</a></li>
+      <li><a href="summary.json">summary.json</a></li>
+      <li><a href="test_matrix.json">test_matrix.json</a></li>
+      <li><a href="logs/source/source_line_map.log">source line map</a></li>
+      <li><a href="logs/source/worker_registry_snapshot.json">worker registry snapshot</a></li>
+      <li><a href="logs/source/server_runtime_snapshot.log">server runtime snapshot</a></li>
+      <li><a href="logs/browser_dom_snapshot_excerpts.md">browser DOM excerpts</a></li>
+    </ul>
+  </section>
+</main>
+</body>
+</html>

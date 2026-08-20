@@ -1,0 +1,16 @@
+{
+  "request_id": "static-audit-TC03-20260818-131911",
+  "live_response": false,
+  "status": "NOT_EVALUATED",
+  "reference_regression": "120/120",
+  "target_findings": [
+    "tc03_batch.py is byte-identical to reference",
+    "dry-run reports final_count=products and composition_count=1 without duration planning",
+    "worker output download rejects batch_* final names"
+  ],
+  "source_evidence": [
+    "reference/docs/TC01_TC05_SUMMARY.md:57-70",
+    "target/gateway/app/backend/main.py:1180-1203",
+    "target/worker/app/backend/main.py:515-520"
+  ]
+}

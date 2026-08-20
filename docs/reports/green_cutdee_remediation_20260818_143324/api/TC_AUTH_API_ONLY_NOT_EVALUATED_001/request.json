@@ -1,0 +1,16 @@
+{
+  "request_id": "TC_AUTH_API_ONLY_NOT_EVALUATED_001-contract-20260818T0746Z",
+  "requests": [
+    {
+      "method": "GET",
+      "url": "https://green.cutdee.com/api/outputs",
+      "headers": {"Authorization": "Bearer [REDACTED]"}
+    },
+    {
+      "method": "POST",
+      "url": "https://green.cutdee.com/api/auth/session",
+      "headers": {"Authorization": "Bearer [REDACTED]"}
+    }
+  ],
+  "warning": "This API evidence is not a Browser UI pass because the secret was not typed into Browser."
+}

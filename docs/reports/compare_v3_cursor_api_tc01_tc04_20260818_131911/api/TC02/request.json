@@ -1,0 +1,9 @@
+{
+  "request_id": "static-audit-TC02-20260818-131911",
+  "live_request": false,
+  "method": "POST",
+  "target_endpoint": "/api/tc02/render",
+  "mode": "tc02",
+  "input_contract": "product video + background; optional cover/audio; 7 x selected compositions",
+  "reason_not_live": "Target gateway could not be imported because psycopg2 is unavailable; target has no Browser UI."
+}

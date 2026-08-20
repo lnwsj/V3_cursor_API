@@ -16,6 +16,8 @@
 
 รายงานหลักฐานจากการทดสอบอยู่ใน [`reports/`](reports/)
 
+Repo docs master ตาม Global Operating Rules: [`Readme.md`](Readme.md) และ index ล่าสุดอยู่ที่ [`index/index.md`](index/index.md)
+
 ## Current Status
 
 `refactor-base` ณ 2026-08-20 อยู่ในสถานะ **RELEASE BLOCKED** สำหรับ Gateway เนื่องจาก refactor router ยังมี lifespan, auth, upload และ worker-dispatch wiring ที่ต้องแก้และทำ E2E acceptance ใหม่
@@ -30,6 +32,17 @@ Production เป็นคนละ snapshot กับ source ปัจจุบ
 | Historical M4 benchmark | `aa671b5` | H.264 acceptance result ก่อน encoder preference เปลี่ยน |
 
 ห้ามนำผลจาก source HEAD, production หรือ historical report มาปะปนกันโดยไม่ระบุ snapshot
+
+## Public surface ที่ตรวจล่าสุด
+
+- หน้าเว็บ: `https://green.cutdee.com/`
+- API proxy: `https://green.cutdee.com/v3api/`
+- OpenAPI จริง: `https://green.cutdee.com/v3api/openapi.json`
+- API health จริง: `https://green.cutdee.com/v3api/healthz`
+- Root `/healthz` และ `/openapi.json` บน public host ตอบเป็น HTML ของ frontend; `/api/openapi.json` ไม่ใช่ OpenAPI URL
+- หน้าเว็บใช้ `/api/...` สำหรับ render/job/output และ output/history ต้องผ่าน authentication
+
+หลักฐานคู่ UI+API ล่าสุด: [`green_cutdee_project_restudy_20260820_095321`](reports/green_cutdee_project_restudy_20260820_095321/)
 
 ## Report Chronology
 

@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="th">
+<head>
+  <meta charset="utf-8">
+  <title>V3_cursor vs V3_cursor_API — TC01–TC04 comparison</title>
+  <style>
+    body{font-family:system-ui,-apple-system,sans-serif;max-width:1180px;margin:32px auto;padding:0 20px;color:#17202a;background:#f7f9fb}
+    h1{margin-bottom:6px} h2{margin-top:30px;color:#173b5f}
+    .verdict{padding:16px 20px;border-left:6px solid #b42318;background:#fff1f0;font-weight:700}
+    .note{padding:12px 16px;background:#eef6ff;border-left:4px solid #2471a3}
+    table{border-collapse:collapse;width:100%;background:white}th,td{border:1px solid #d7dee5;padding:8px;vertical-align:top;text-align:left}th{background:#e9f0f7}
+    .fail{color:#b42318;font-weight:700}.pass{color:#067647;font-weight:700}.blocked{color:#9a6700;font-weight:700}
+    code{font-size:.9em;word-break:break-word} li{margin:6px 0}
+  </style>
+</head>
+<body>
+  <h1>เปรียบเทียบ V3_cursor กับ V3_cursor_API — TC01–TC04</h1>
+  <div class="verdict">FAIL_WITH_RCA / ACCEPTANCE_BLOCKED — reference regression 120/120; target ไม่มี paired Browser UI + live API evidence</div>
+  <div class="note">Reference: <code>/Users/sj88/Documents/codex/V3_cursor</code> @ <code>fdf50f0</code>. Target: <code>/Users/sj88/Documents/codex/V3_cursor_API</code> @ <code>f3ef05e</code>. ไม่มี source code ถูกแก้ในรอบนี้.</div>
+  <h2>AI Full Dev recording</h2>
+  <p>Preflight activity <code>12057</code> POST 201; an unsupported <code>completed_with_boundary</code> PATCH returned 400 and was corrected to allowed status <code>blocked</code> with PATCH 200. During-analysis activity <code>12060</code> POST 201. Closeout activity <code>12061</code> POST 201. Details: <code>logs/ai_full_dev.log</code>.</p>
+  <h2>TC matrix</h2>
+  <table>
+    <tr><th>TC</th><th>Reference contract</th><th>Target finding</th><th>Verdict</th></tr>
+    <tr><td>TC01</td><td>Product → Chroma → Final</td><td>progress mapping drift; generic output download rejects non-output_* names</td><td class="fail">FAIL</td></tr>
+    <tr><td>TC02</td><td>Reframe 7x composition → Chroma</td><td>parallel cap 10, 720p intermediate, Windows path stem leak, optional parallel ordering drift</td><td class="fail">FAIL</td></tr>
+    <tr><td>TC03</td><td>Batch split → Chroma</td><td>pipeline bytes same, but dry-run is generic and batch_* download is rejected</td><td class="fail">FAIL</td></tr>
+    <tr><td>TC04</td><td>Reframe → Batch split → Chroma</td><td>valid reframe outputs are not surfaced in skip path; API publication/download is incomplete</td><td class="fail">FAIL</td></tr>
+  </table>
+  <h2>Hard evidence</h2>
+  <ul>
+    <li>Reference tests: <code>120/120 OK</code>.</li>
+    <li>Target probes: reference max parallel 3 vs target 10; reference accepts null composition fallback vs target ValueError; reference scale 1080:1920 vs target 404:720; target Windows path output contains the full Windows prefix.</li>
+    <li>Worker runtime probe: <code>batch_*.mp4</code> → <code>output not found</code>; only <code>output_*.mp4</code> returns FileResponse.</li>
+    <li>Gateway import: <code>ModuleNotFoundError: No module named 'psycopg2'</code>.</li>
+  </ul>
+  <h2>Evidence gate</h2>
+  <table>
+    <tr><th>Gate</th><th>Result</th></tr>
+    <tr><td>Browser screenshots</td><td class="blocked">0/20 — target repo has no UI; no synthetic images</td></tr>
+    <tr><td>Live API request/response</td><td class="blocked">0/4 — gateway import blocked</td></tr>
+    <tr><td>Pair completeness / consistency</td><td class="fail">0% / 0%</td></tr>
+    <tr><td>Critical errors</td><td class="fail">5</td></tr>
+    <tr><td>Overall</td><td class="fail">FAIL_WITH_RCA_AND_ACCEPTANCE_BLOCKER</td></tr>
+  </table>
+  <h2>Next action</h2>
+  <p>Sync the contract and output publication fixes first, add target tests, install the declared gateway dependency in an isolated environment, then rerun real Browser UI + API pairs. Do not call this PASS until all pair gates are 100%.</p>
+  <p>Details: <a href="report.md">report.md</a> · <a href="summary.json">summary.json</a> · <a href="test_matrix.json">test_matrix.json</a></p>
+</body>
+</html>

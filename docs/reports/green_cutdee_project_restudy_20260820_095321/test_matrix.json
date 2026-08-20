@@ -1,0 +1,78 @@
+{
+  "report_id": "green_cutdee_project_restudy_20260820_095321",
+  "pair_policy": "Every study testcase has five browser screenshots plus API request/response/timing evidence and a binding file.",
+  "testcases": [
+    {
+      "id": "STUDY-TC01_HOME_HEALTH",
+      "purpose": "Pair public UI home with live gateway health.",
+      "ui_screenshots": 5,
+      "api": "api/TC01_home_health",
+      "pair": "pairs/pair_study_TC01_home_health__binding.json",
+      "status": "PASS_WITH_SCOPE_NOTE",
+      "scope": "No authenticated render was attempted."
+    },
+    {
+      "id": "STUDY-TC02_VERSION_DRIFT",
+      "purpose": "Compare UI version label with API release version.",
+      "ui_screenshots": 5,
+      "api": "api/TC02_version",
+      "pair": "pairs/pair_study_TC02_version__binding.json",
+      "status": "FAIL",
+      "finding": "UI v1.1.1 differs from API v1.2.0."
+    },
+    {
+      "id": "STUDY-TC03_OPENAPI_CONTRACT",
+      "purpose": "Verify the deployed API schema location and route-family documentation surface.",
+      "ui_screenshots": 5,
+      "api": "api/TC03_openapi_contract",
+      "pair": "pairs/pair_study_TC03_openapi__binding.json",
+      "status": "PASS_WITH_SCOPE_NOTE",
+      "finding": "OpenAPI is at /v3api/openapi.json; /api/openapi.json is not the schema URL."
+    },
+    {
+      "id": "STUDY-TC04_OUTPUT_AUTH_GUARD",
+      "purpose": "Verify UI token guard and unauthenticated output endpoint guard.",
+      "ui_screenshots": 5,
+      "api": "api/TC04_auth_guard_outputs",
+      "pair": "pairs/pair_study_TC04_auth_guard__binding.json",
+      "status": "PASS_WITH_SCOPE_NOTE",
+      "finding": "UI and API both require authentication; HTTP 401 observed."
+    },
+    {
+      "id": "STUDY-TC05_CLUSTER_HEALTH",
+      "purpose": "Capture current worker capacity and health.",
+      "ui_screenshots": 5,
+      "api": "api/TC05_cluster_health",
+      "pair": "pairs/pair_study_TC05_cluster_health__binding.json",
+      "status": "PASS_WITH_SCOPE_NOTE",
+      "finding": "6 configured, 4 enabled/healthy, 2 disabled, capacity 6 at capture time."
+    },
+    {
+      "id": "STUDY-TC06_CLUSTER_PUBLIC_METRICS",
+      "purpose": "Separate current node state from 24-hour historical metrics.",
+      "ui_screenshots": 5,
+      "api": "api/TC06_cluster_public",
+      "pair": "pairs/pair_study_TC06_cluster_public__binding.json",
+      "status": "PASS_WITH_SCOPE_NOTE",
+      "finding": "Historical metrics can mention a node that is currently disabled."
+    },
+    {
+      "id": "STUDY-TC07_RENDER_AUTH_GUARD",
+      "purpose": "Verify no-file UI guard and unauthenticated render guard without uploading media.",
+      "ui_screenshots": 5,
+      "api": "api/TC07_render_auth_guard",
+      "pair": "pairs/pair_study_TC07_render_guard__binding.json",
+      "status": "PASS_WITH_SCOPE_NOTE",
+      "finding": "Render was not evaluated as a real job; no token and no files were used."
+    },
+    {
+      "id": "STUDY-TC08_PUBLIC_PREFIX_HEALTHZ",
+      "purpose": "Verify the public API prefix and distinguish it from frontend catch-all paths.",
+      "ui_screenshots": 5,
+      "api": "api/TC08_public_healthz",
+      "pair": "pairs/pair_study_TC08_public_healthz__binding.json",
+      "status": "PASS_WITH_SCOPE_NOTE",
+      "finding": "/v3api/healthz returns JSON; root /healthz returns frontend HTML."
+    }
+  ]
+}

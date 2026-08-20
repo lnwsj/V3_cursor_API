@@ -1,0 +1,14 @@
+{
+  "request_id": "TC_HEALTH_UI_001-health-20260818T0746Z",
+  "method": "GET",
+  "url": "https://green.cutdee.com/api/health",
+  "headers": {
+    "Accept": "application/json",
+    "Authorization": "ABSENT"
+  },
+  "body": null,
+  "ui_binding": {
+    "screenshots": ["screenshots/02_input_ready.png", "screenshots/04_result_state.png"],
+    "observed_fields": ["h264_nvenc", "402 GB free", "V1.1.1"]
+  }
+}

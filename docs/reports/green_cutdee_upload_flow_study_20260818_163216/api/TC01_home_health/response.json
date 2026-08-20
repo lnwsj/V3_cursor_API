@@ -1,0 +1,27 @@
+{
+  "request_id": "study-ui-home-20260818-163216",
+  "mode_text_hash": "81f64b1045bf127328741eb271eac5784c027c2c8f21059ec2f8903b7ba38bc2",
+  "http_status": 200,
+  "server_response": {
+    "status": "ok",
+    "service": "v3-cursor-api-gateway",
+    "version": "1.2.0",
+    "commit": "f6299fa",
+    "total_workers": 3,
+    "healthy_workers": 3,
+    "configured_workers": 5,
+    "disabled_workers": 2,
+    "recommended_encoder": "h264_nvenc",
+    "available_encoders": [
+      "libx264",
+      "h264_nvenc",
+      "av1_nvenc",
+      "hevc_nvenc",
+      "h264_videotoolbox",
+      "hevc_videotoolbox"
+    ],
+    "disk_free_gb": 400.62,
+    "disk_used_pct": 52.0
+  },
+  "response_headers_request_id_echoed": false
+}

@@ -1,0 +1,9 @@
+{
+  "method": "GET",
+  "url": "https://green.cutdee.com/api/cluster/health",
+  "headers": {
+    "Accept": "application/json"
+  },
+  "body": null,
+  "auth": "none"
+}

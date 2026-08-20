@@ -1,0 +1,11 @@
+{
+  "pair_id": "TC04_compare_20260818_131911",
+  "screenshot_list": [],
+  "request_file": "api/TC04/request.json",
+  "response_file": "api/TC04/response.json",
+  "timing_file": "api/TC04/timing.json",
+  "request_id_match": true,
+  "mode_text_hash_match": "NOT_APPLICABLE_STATIC_AUDIT",
+  "pair_verdict": "FAIL_INCOMPLETE",
+  "reason": "No target UI screenshots and no live API response."
+}

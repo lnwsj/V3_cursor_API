@@ -1,0 +1,7 @@
+{
+  "request_id": "study-cluster-20260818-163216-r2",
+  "http_status": 200,
+  "time_total_sec": 0.341827,
+  "size_download_bytes": 480,
+  "measured_by": "curl -w"
+}

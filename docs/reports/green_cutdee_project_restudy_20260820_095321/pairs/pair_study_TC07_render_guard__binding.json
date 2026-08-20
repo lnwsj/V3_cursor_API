@@ -1,0 +1,31 @@
+{
+  "pair_id": "pair_study_TC07_render_guard",
+  "testcase_id": "STUDY-TC07_RENDER_AUTH_GUARD",
+  "evidence_request_id": "restudy-20260820-render-guard",
+  "ui": {
+    "screenshots": [
+      "screenshots/01_open_page.png",
+      "screenshots/02_input_ready.png",
+      "screenshots/03_click_generate.png",
+      "screenshots/04_result_state.png",
+      "screenshots/05_audio_ready_or_error.png"
+    ],
+    "mode_text_hash": "sha256:c0513ea82a2263d738a6faba29657878702a704adad2310b9393b8e30babb32d"
+  },
+  "api": {
+    "request": "api/TC07_render_auth_guard/request.json",
+    "response": "api/TC07_render_auth_guard/response.json",
+    "timing": "api/TC07_render_auth_guard/timing.json"
+  },
+  "consistency_checks": {
+    "request_id_binding_match": true,
+    "server_echoed_request_id": false,
+    "mode_text_hash_match": true,
+    "ui_api_origin_match": true,
+    "auth_guard_consistent": true,
+    "real_upload_not_performed": true,
+    "notes": "The UI correctly disabled Render without files; the unauthenticated endpoint correctly returned HTTP 401. This is not a render success test."
+  },
+  "pair_complete": true,
+  "pair_verdict": "PASS_WITH_SCOPE_NOTE"
+}

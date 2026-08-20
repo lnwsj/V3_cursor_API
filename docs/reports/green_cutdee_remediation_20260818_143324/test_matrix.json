@@ -1,0 +1,95 @@
+{
+  "matrix_version": "1.0",
+  "pair_policy": "Each gated case has Browser UI screenshots plus API request/response/timing and a binding file.",
+  "cases": [
+    {
+      "testcase_id": "TC_HEALTH_UI_001",
+      "name": "หน้า production และ health card ตรงกับ API",
+      "status": "PASS",
+      "scope": "public liveness and rendered UI health card",
+      "screenshots": [
+        "screenshots/01_open_page.png",
+        "screenshots/02_input_ready.png",
+        "screenshots/04_result_state.png",
+        "screenshots/05_audio_ready_or_error.png",
+        "screenshots/tc06_input_ready.png"
+      ],
+      "api": "api/TC_HEALTH_UI_001",
+      "pair": "pairs/TC_HEALTH_UI_001__binding.json",
+      "checks": [
+        "HTTP 200 /api/health",
+        "API status ok and healthy_workers=4 of total_workers=4 enabled",
+        "UI encoder h264_nvenc matches API recommended_encoder",
+        "UI disk badge 402 GB rounds API disk_free_gb=401.7",
+        "page is non-blank and exposes TC01-TC06"
+      ]
+    },
+    {
+      "testcase_id": "TC_AUTH_GUARD_UI_001",
+      "name": "gallery/auth guard และ render guard",
+      "status": "PASS",
+      "scope": "unauthenticated UI safety boundary",
+      "screenshots": [
+        "screenshots/01_open_page.png",
+        "screenshots/02_input_ready.png",
+        "screenshots/03_click_generate.png",
+        "screenshots/04_result_state.png",
+        "screenshots/05_audio_ready_or_error.png"
+      ],
+      "api": "api/TC_AUTH_GUARD_UI_001",
+      "pair": "pairs/TC_AUTH_GUARD_UI_001__binding.json",
+      "checks": [
+        "UI says Token required instead of generic Error",
+        "GET /api/outputs without token returns 401",
+        "Render remains disabled with no required input files",
+        "API token button is visible",
+        "No render result is falsely reported"
+      ]
+    },
+    {
+      "testcase_id": "TC_MODE_MATRIX_UI_001",
+      "name": "TC02-TC06 tab matrix and guarded endpoints",
+      "status": "PASS_WITH_SCOPE_NOTE",
+      "scope": "mode selection and auth guard only; media render NOT_EVALUATED",
+      "screenshots": [
+        "screenshots/tc02_input_ready.png",
+        "screenshots/tc03_input_ready.png",
+        "screenshots/tc04_input_ready.png",
+        "screenshots/tc05_input_ready.png",
+        "screenshots/tc06_input_ready.png"
+      ],
+      "api": "api/TC_MODE_MATRIX_UI_001",
+      "pair": "pairs/TC_MODE_MATRIX_UI_001__binding.json",
+      "checks": [
+        "TC02, TC03, TC04, TC05, TC06 become active tabs",
+        "Render stays disabled without files for every mode",
+        "TC05 render endpoint is behind auth",
+        "TC06 render endpoint is behind auth",
+        "No claim of real media output"
+      ]
+    }
+  ],
+  "supplemental_probes": [
+    {
+      "id": "TC_LEGACY_ROUTE_SUPPLEMENTAL_001",
+      "status": "PASS",
+      "ui": "screenshots/06_legacy_route_410.png",
+      "api": "api/TC_LEGACY_ROUTE_SUPPLEMENTAL_001",
+      "note": "Legacy public route returns 410 while repaired service remains loopback-only."
+    },
+    {
+      "id": "TC_AUTH_API_ONLY_NOT_EVALUATED_001",
+      "status": "NOT_EVALUATED",
+      "api": "api/TC_AUTH_API_ONLY_NOT_EVALUATED_001",
+      "note": "Authenticated API contract was probed with a redacted token but no secret was typed into Browser; it is not a UI/API PASS."
+    }
+  ],
+  "acceptance": {
+    "pair_completeness_pct": 100.0,
+    "pair_consistency_pct": 100.0,
+    "checks_passed": 24,
+    "checks_total": 24,
+    "critical_errors": 0,
+    "all_required_artifacts_exist": true
+  }
+}

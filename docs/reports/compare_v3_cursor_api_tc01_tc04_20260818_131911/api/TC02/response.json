@@ -1,0 +1,18 @@
+{
+  "request_id": "static-audit-TC02-20260818-131911",
+  "live_response": false,
+  "status": "NOT_EVALUATED",
+  "reference_regression": "120/120",
+  "target_findings": [
+    "reframe parallel max is 10 instead of 3",
+    "default reframe intermediate scale is 404:720 instead of 1080:1920",
+    "Windows-style source stem is not portable",
+    "optional parallel chroma appends outputs by completion order"
+  ],
+  "source_evidence": [
+    "reference/core/contract.py:109,472",
+    "target/worker/app/backend/core/contract.py:108-109,646-665",
+    "target/worker/app/backend/core/ai_reframe.py:595-605,783-816,1087-1137",
+    "target/worker/app/backend/core/pipelines/tc02_reframe.py:410-473"
+  ]
+}

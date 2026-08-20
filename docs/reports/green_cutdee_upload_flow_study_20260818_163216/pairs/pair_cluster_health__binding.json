@@ -1,0 +1,25 @@
+{
+  "pair_id": "pair_cluster_health",
+  "testcase_id": "STUDY-TC08",
+  "ui": {
+    "screenshots": [
+      "screenshots/01_home_upload_zones.png"
+    ],
+    "mode": "CLUSTER",
+    "text_hash": "20d938c465f31786291048b5ce75cf908c38e05bc5a2794f2da975e055112d68"
+  },
+  "api": {
+    "request": "api/TC08_cluster_health/request.json",
+    "response": "api/TC08_cluster_health/response.json",
+    "timing": "api/TC08_cluster_health/timing.json",
+    "request_id": "study-cluster-20260818-163216-r2"
+  },
+  "consistency_checks": {
+    "request_id_match": true,
+    "mode_text_hash_match": true,
+    "same_public_origin": true,
+    "ui_api_pair_complete": true
+  },
+  "pair_verdict": "PASS_WITH_SCOPE_NOTE",
+  "scope_note": "UI encoder badge is consistent with the aggregate API encoder list, but the UI does not expose per-job worker identity."
+}

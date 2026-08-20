@@ -1,0 +1,30 @@
+{
+  "pair_id": "pair_study_TC03_openapi",
+  "testcase_id": "STUDY-TC03_OPENAPI_CONTRACT",
+  "evidence_request_id": "restudy-20260820-openapi",
+  "ui": {
+    "screenshots": [
+      "screenshots/01_open_page.png",
+      "screenshots/02_input_ready.png",
+      "screenshots/03_click_generate.png",
+      "screenshots/04_result_state.png",
+      "screenshots/05_audio_ready_or_error.png"
+    ],
+    "mode_text_hash": "sha256:c0513ea82a2263d738a6faba29657878702a704adad2310b9393b8e30babb32d"
+  },
+  "api": {
+    "request": "api/TC03_openapi_contract/request.json",
+    "response": "api/TC03_openapi_contract/response.json",
+    "timing": "api/TC03_openapi_contract/timing.json"
+  },
+  "consistency_checks": {
+    "request_id_binding_match": true,
+    "server_echoed_request_id": false,
+    "mode_text_hash_match": true,
+    "ui_api_origin_match": true,
+    "ui_route_family_present_in_openapi": true,
+    "notes": "The deployed UI calls the /api job/render family; the API schema is available at /v3api/openapi.json."
+  },
+  "pair_complete": true,
+  "pair_verdict": "PASS_WITH_SCOPE_NOTE"
+}

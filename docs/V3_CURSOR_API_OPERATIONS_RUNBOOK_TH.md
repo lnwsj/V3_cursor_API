@@ -18,9 +18,20 @@
 ### Gateway
 
 ```bash
+# Direct gateway check on the host (8788)
 curl -fsS "$GATEWAY_BASE/healthz"
 curl -fsS "$GATEWAY_BASE/api/version"
 curl -fsS "$GATEWAY_BASE/api/cluster/health"
+```
+
+For the public `green.cutdee.com` host, use the API-prefixed probes below. The root
+`/healthz` path is served by the frontend catch-all and returns HTML, not gateway
+JSON health; the public OpenAPI schema is `/v3api/openapi.json`.
+
+```bash
+curl -fsS https://green.cutdee.com/v3api/healthz
+curl -fsS https://green.cutdee.com/api/health
+curl -fsS https://green.cutdee.com/v3api/openapi.json
 ```
 
 ### Worker

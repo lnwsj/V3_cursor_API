@@ -1,0 +1,18 @@
+{
+  "request_id": "static-audit-TC04-20260818-131911",
+  "live_response": false,
+  "status": "NOT_EVALUATED",
+  "reference_regression": "120/120",
+  "target_findings": [
+    "skip-batch result does not surface valid reframe outputs",
+    "dry-run is generic and ignores reframe x segment count",
+    "worker output download rejects batch_* final names",
+    "reframe parallel and path behavior drift from reference"
+  ],
+  "source_evidence": [
+    "reference/core/pipelines/tc04_rebatch.py:314-344",
+    "target/worker/app/backend/core/pipelines/tc04_rebatch.py:314-326",
+    "target/gateway/app/backend/main.py:1180-1203",
+    "target/worker/app/backend/main.py:414-425,515-520"
+  ]
+}

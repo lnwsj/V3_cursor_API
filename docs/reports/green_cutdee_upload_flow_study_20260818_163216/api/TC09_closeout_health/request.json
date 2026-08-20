@@ -1,0 +1,11 @@
+{
+  "request_id": "study-closeout-health-20260818-163216",
+  "mode_text_hash": "20d938c465f31786291048b5ce75cf908c38e05bc5a2794f2da975e055112d68",
+  "method": "GET",
+  "url": "https://green.cutdee.com/api/health?request_id=study-closeout-health-20260818-163216",
+  "headers": {
+    "X-Request-ID": "study-closeout-health-20260818-163216"
+  },
+  "body": null,
+  "side_effect": "read-only closeout probe"
+}

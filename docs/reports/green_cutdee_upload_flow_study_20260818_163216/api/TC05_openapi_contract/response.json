@@ -1,0 +1,50 @@
+{
+  "request_id": "study-ui-tc05-20260818-163216",
+  "mode_text_hash": "527f58527b409a9027946e4e34f246616e5414c103e74cc06bb8fb5b32c88bad",
+  "http_status": 200,
+  "server_response_summary": {
+    "openapi": "3.1.0",
+    "title": "V3_cursor_API Gateway",
+    "version": "1.2.0",
+    "paths_confirmed": [
+      {
+        "method": "POST",
+        "path": "/api/render/{tc}",
+        "auth": "bearer or cutdee_session",
+        "description": "multipart FormData with files + settings"
+      },
+      {
+        "method": "GET",
+        "path": "/api/job/{job_id}",
+        "auth": "bearer or cutdee_session"
+      },
+      {
+        "method": "GET",
+        "path": "/api/job/{job_id}/output",
+        "auth": "bearer or cutdee_session"
+      },
+      {
+        "method": "GET",
+        "path": "/api/job/{job_id}/download-all",
+        "auth": "bearer or cutdee_session"
+      },
+      {
+        "method": "GET",
+        "path": "/api/outputs",
+        "auth": "bearer or cutdee_session"
+      },
+      {
+        "method": "GET",
+        "path": "/api/download/{file_path}",
+        "auth": "bearer or cutdee_session"
+      },
+      {
+        "method": "GET",
+        "path": "/api/cluster/health",
+        "auth": "public"
+      }
+    ]
+  },
+  "response_headers_request_id_echoed": false,
+  "raw_openapi_sha256": "not_saved_in_report_to keep report compact; HTTP body size is recorded in timing.json"
+}

@@ -40,7 +40,15 @@ Path-based: /v3api/* → gateway:8788 → worker(s)
 
 > **Current source warning:** `refactor-base / 25e1032` is not a production-ready Gateway release. The extracted Gateway routers still have startup, auth, upload and worker-dispatch blockers. Production currently runs a separate `1.2.0 / f6299fa` snapshot. See the current-state audit before using the examples below as an operational contract.
 
-## Endpoints (all under `/v3api` on green.cutdee.com)
+## Public endpoint prefixes
+
+The deployed site has two surfaces that must not be conflated:
+
+- `https://green.cutdee.com/` — frontend UI. The UI JavaScript calls `/api/...` routes.
+- `https://green.cutdee.com/v3api/` — public API proxy. The deployed OpenAPI schema is `/v3api/openapi.json` and JSON liveness is `/v3api/healthz`.
+- Root `/healthz` and `/openapi.json` are frontend HTML catch-all responses on the public host; `/api/openapi.json` is not the schema URL and currently returns 404.
+
+## Endpoints (legacy/API contract)
 
 The endpoint list below describes the intended/legacy contract. Verify the current route table and release marker before treating any render route as operational; the current `refactor-base` Gateway is release-blocked.
 

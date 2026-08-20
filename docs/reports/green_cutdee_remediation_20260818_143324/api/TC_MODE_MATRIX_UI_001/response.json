@@ -1,0 +1,7 @@
+{
+  "request_id": "TC_MODE_MATRIX_UI_001-render-guard-20260818T0746Z",
+  "responses": [
+    {"mode": "tc05", "http_status": 401, "body": {"detail": "invalid API token"}},
+    {"mode": "tc06", "http_status": 401, "body": {"detail": "invalid API token"}}
+  ]
+}

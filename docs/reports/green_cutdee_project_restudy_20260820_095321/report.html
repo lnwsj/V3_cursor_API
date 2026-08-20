@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="th">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Green Cutdee — Project Restudy 2026-08-20</title>
+  <style>
+    :root { color-scheme: light; --ink:#17202a; --muted:#5b6875; --line:#d9e0e7; --bg:#f5f7fa; --card:#fff; --red:#a12626; --amber:#8a5a00; --green:#176b45; }
+    * { box-sizing:border-box; }
+    body { margin:0; background:var(--bg); color:var(--ink); font:15px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; }
+    main { max-width:1200px; margin:0 auto; padding:28px; }
+    h1 { margin:0 0 4px; font-size:29px; }
+    h2 { margin-top:30px; border-bottom:1px solid var(--line); padding-bottom:7px; }
+    h3 { margin-top:22px; }
+    .meta { color:var(--muted); }
+    .banner { margin:18px 0; padding:16px 18px; border:1px solid #e4aaaa; border-left:6px solid var(--red); background:#fff7f7; }
+    .grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(210px,1fr)); gap:12px; }
+    .card { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:15px; }
+    .card strong { display:block; font-size:22px; }
+    table { width:100%; border-collapse:collapse; background:var(--card); }
+    th,td { border:1px solid var(--line); padding:9px 10px; vertical-align:top; text-align:left; }
+    th { background:#eef2f6; }
+    code { background:#eef2f6; padding:1px 4px; border-radius:4px; }
+    a { color:#1559a6; }
+    .fail { color:var(--red); font-weight:700; }
+    .scope { color:var(--amber); font-weight:700; }
+    .pass { color:var(--green); font-weight:700; }
+    ul { margin-top:7px; }
+    .small { color:var(--muted); font-size:13px; }
+  </style>
+</head>
+<body>
+<main>
+  <h1>Green Cutdee / V3_cursor_API</h1>
+  <div class="meta">Project restudy and documentation audit · 2026-08-20 09:59:38 +07 · project: <code>green.cutdee.com</code></div>
+  <div class="banner"><strong class="fail">FAIL_WITH_SCOPE_NOTE</strong><br>
+    Evidence collection is complete for the declared study scope. A production PASS is not claimed: UI/API versions differ, the local refactor candidate has runtime-risk/placeholder paths, and authenticated media flow was not evaluated.</div>
+
+  <div class="grid">
+    <div class="card"><strong>8/8</strong><span>testcases have five UI screenshots</span></div>
+    <div class="card"><strong>8/8</strong><span>API request/response/timing triplets</span></div>
+    <div class="card"><strong>7/8</strong><span>pair consistency checks</span></div>
+    <div class="card"><strong>45*</strong><span>local unit tests passed on repeat (*first run had one transient lifecycle failure)</span></div>
+    <div class="card"><strong>89</strong><span>ruff errors on entrypoints</span></div>
+  </div>
+
+  <h2>Release and runtime identity</h2>
+  <table>
+    <tr><th>Surface</th><th>Observed</th><th>Evidence</th></tr>
+    <tr><td>Public UI</td><td><code>v1.1.1</code>, h264_nvenc, ~397 GB free</td><td><a href="screenshots/01_open_page.png">01_open_page.png</a></td></tr>
+    <tr><td>Public API</td><td><code>1.2.0</code>, commit <code>f6299fa</code>, Python 3.12.3</td><td><a href="api/TC02_version/response.json">version response</a></td></tr>
+    <tr><td>Repo HEAD</td><td><code>refactor-base</code>, <code>ba921c0</code> (docs-only)</td><td>Code baseline under audit: <code>25e1032</code>; <a href="logs/post_doc_commit_validation.log">post-commit validation</a></td></tr>
+    <tr><td>Dedicated Server</td><td><code>/opt/v3-cursor-api</code>; gateway 8788, worker 8789; both active/enabled</td><td><a href="logs/remote_server_readonly.log">read-only observation</a></td></tr>
+  </table>
+
+  <h2>Most important API observations</h2>
+  <table>
+    <tr><th>Probe</th><th>Result</th><th>Interpretation</th></tr>
+    <tr><td><code>/api/health</code></td><td>200; 4 healthy / 6 configured</td><td>Gateway is reachable.</td></tr>
+    <tr><td><code>/v3api/openapi.json</code></td><td>200 JSON; 50 paths</td><td>Use this as the deployed schema URL.</td></tr>
+    <tr><td><code>/api/outputs</code> without auth</td><td>401</td><td>Outputs are not public.</td></tr>
+    <tr><td><code>/api/cluster/health</code></td><td>6 slots; 4 enabled/healthy; 2 disabled</td><td>Current capacity, not per-job worker proof.</td></tr>
+    <tr><td><code>/v3api/healthz</code></td><td>200 JSON</td><td>Correct public API liveness URL.</td></tr>
+    <tr><td>root <code>/healthz</code></td><td>200 HTML</td><td>Frontend catch-all; do not document as JSON gateway health.</td></tr>
+  </table>
+
+  <h2>What should be updated in documentation</h2>
+  <table>
+    <tr><th>Priority</th><th>Files</th><th>Required correction</th></tr>
+    <tr><td class="fail">P0</td><td>Missing Notion-aligned master docs: <code>docs/Readme.md</code>, <code>docs/index/index.md</code>, <code>docs/memory/memory.md</code>, <code>docs/timesheet/timesheet.md</code>, <code>docs/readme/readme.md</code>, <code>docs/debug_db/debug_db.md</code>, <code>docs/report/report.md</code></td><td>Create project identity/source-of-truth/current-vs-live headers and links to this report.</td></tr>
+    <tr><td class="fail">P0</td><td><code>README.md</code>, <code>docs/README_TH.md</code>, <code>docs/V3_CURSOR_API_CURRENT_STATE_AUDIT_TH.md</code></td><td>Keep the partial audit current: document <code>/api</code> and <code>/v3api</code> dual surface, <code>/v3api/openapi.json</code>, root health mismatch, source/live separation, and this evidence package.</td></tr>
+    <tr><td class="fail">P0</td><td><code>docs/V3_CURSOR_API_DEVELOPMENT_GUIDE_TH.md</code>, <code>docs/V3_CURSOR_API_USER_GUIDE_TH.md</code></td><td>Replace monolith/dynamic-route claims; document actual multipart route, auth, 202 enqueue/poll semantics, and safe download examples.</td></tr>
+    <tr><td class="fail">P0</td><td><code>docs/V3_CURSOR_API_OPERATIONS_RUNBOOK_TH.md</code>, <code>deploy/install.sh</code></td><td>Record actual systemd ExecStart/path and generated-unit behavior; remove secret defaults/literals from implementation and docs.</td></tr>
+    <tr><td class="scope">P1</td><td><code>docs/V3_CURSOR_API_DEEP_DIVE_TH.md</code>, <code>docs/V3_MAC_M4_SPEED_BENCHMARK_TH.md</code></td><td>Mark historical snapshots and link current release-lineage report instead of overwriting old observations.</td></tr>
+    <tr><td class="scope">P1</td><td><code>CLAUDE.md</code>, <code>.github/workflows/ci.yml</code></td><td>Patch only around existing user changes; correct route/dispatch/download claims and make lint/tests/startup checks blocking.</td></tr>
+  </table>
+
+  <h2>Source blockers</h2>
+  <ul>
+    <li><code>gateway/app/backend/main.py:90-105</code> references undefined lifecycle symbols.</li>
+    <li><code>gateway/app/backend/routers/jobs.py:60-71</code> returns parsed metadata rather than proving upload/dispatch.</li>
+    <li><code>gateway/app/backend/routers/jobs.py:161-193</code> creates a DB job while worker forwarding is omitted.</li>
+    <li><code>gateway/app/backend/routers/jobs.py:204-213</code> contains placeholder download/upload behavior.</li>
+    <li>Route-time absolute imports remain after the package refactor.</li>
+    <li>Installer and code contain secret/default assignments; raw values are deliberately not reproduced here.</li>
+  </ul>
+
+  <h2>Evidence package</h2>
+  <ul>
+    <li><a href="report.md">report.md</a> — detailed Thai report and update plan</li>
+    <li><a href="summary.json">summary.json</a> — machine-readable outcome</li>
+    <li><a href="test_matrix.json">test_matrix.json</a> — testcase-to-evidence map</li>
+    <li><a href="screenshots/">screenshots/</a> — five PNG captures</li>
+    <li><a href="api/">api/</a> — request/response/timing evidence</li>
+    <li><a href="pairs/">pairs/</a> — pair binding and consistency records</li>
+    <li><a href="logs/">logs/</a> — source, validation, browser, server, and Notion context logs</li>
+  </ul>
+  <p class="small">No raw API token, server password, database password, or internal token is stored in this report.</p>
+</main>
+</body>
+</html>

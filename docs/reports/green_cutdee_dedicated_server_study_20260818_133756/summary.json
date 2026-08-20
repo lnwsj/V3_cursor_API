@@ -1,0 +1,68 @@
+{
+  "schema_version": "1.0",
+  "task_slug": "green_cutdee_dedicated_server_study_20260818_133756",
+  "created_at": "2026-08-18T13:37:56+07:00",
+  "project": {
+    "id": "green.cutdee.com",
+    "name": "green.cutdee.com",
+    "server_ip": "103.253.75.161",
+    "public_url": "https://green.cutdee.com/",
+    "environment": "production_dedicated_server_read_only",
+    "source_of_truth": "fresh origin probes plus deployed source/config"
+  },
+  "machine": "CPU=12th Gen Intel Core i9-12900K|CORE=24|RAM=64GB|GPU=Intel AlderLake-S GT1 iGPU|SSD=1TB WDC WDS100T2B0C",
+  "revisions": {
+    "deployed_repo": "/opt/v3-cursor-api",
+    "deployed_head": "f3ef05e7a83448ac3283f92c6df668e6ac4fbe12",
+    "tracked_diff_files": 0,
+    "untracked_files": 24
+  },
+  "verdict": "STUDY_COMPLETE_WITH_CRITICAL_FINDINGS",
+  "acceptance": {
+    "pair_completeness_percent": 100,
+    "pair_consistency_percent": 71.43,
+    "checks_passed": 5,
+    "checks_total": 7,
+    "critical_errors": 6,
+    "all_required_artifacts": true,
+    "render_flow": "NOT_EVALUATED_READ_ONLY_NO_INPUT_MEDIA"
+  },
+  "live_surface": {
+    "ui_status": "HTTP_200_BROWSER_REAL",
+    "ui_static_version": "V1.0.0.20",
+    "api_version": "1.1.0-cluster",
+    "api_health_status": "HTTP_200",
+    "cluster": {
+      "ok": true,
+      "healthy": 4,
+      "total": 5,
+      "total_capacity": 9,
+      "active_jobs": 0
+    },
+    "outputs_endpoint_count": 100,
+    "ui_gallery_count": 0
+  },
+  "critical_findings": [
+    "legacy systemd service migration checksum mismatch and restart loop",
+    "unmanaged root-owned detached process on legacy port 21002",
+    "UI/API gallery response-shape mismatch",
+    "UI/API version and health schema mismatch",
+    "anonymous mutation-capable routes and public metadata",
+    "INPUT ACCEPT firewall and conflicting enabled Nginx backups"
+  ],
+  "evidence": {
+    "formal_testcase": "PUBLIC_SURFACE_001",
+    "screenshots": 5,
+    "api_request_files": 3,
+    "api_response_files": 3,
+    "api_timing_files": 3,
+    "pair_bindings": 1,
+    "logs": 9,
+    "secrets_redacted": true
+  },
+  "ai_full_dev": {
+    "preflight_activity_id": 12063,
+    "during_analysis_activity_id": 12065,
+    "closeout_activity_id": 12066
+  }
+}

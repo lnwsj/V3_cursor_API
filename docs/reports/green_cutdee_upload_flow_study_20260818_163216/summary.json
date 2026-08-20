@@ -1,0 +1,52 @@
+{
+  "report_id": "green_cutdee_upload_flow_study_20260818_163216",
+  "project_id": "green.cutdee.com",
+  "project_name": "Green Cutdee V3 cursor API",
+  "environment": "production",
+  "mode": "read_only_study",
+  "status": "STUDY_COMPLETE_WITH_SCOPE_NOTE",
+  "verdict": "functional upload/render/download NOT_EVALUATED",
+  "public_ui": "https://green.cutdee.com/",
+  "public_api": "https://green.cutdee.com/api/",
+  "openapi": "https://green.cutdee.com/v3api/openapi.json",
+  "gateway_version": "1.2.0",
+  "gateway_commit": "f6299fa",
+  "ui_version": "V1.1.1",
+  "closeout_gateway_health_status": "degraded",
+  "evidence": {
+    "browser_screenshots": 10,
+    "api_testcases": 6,
+    "api_request_response_timing_sets": 6,
+    "pair_bindings": 6,
+    "pair_completeness_percent": 100,
+    "pair_consistency_percent": 100,
+    "checks_passed": 30,
+    "checks_total": 30,
+    "critical_errors": 0,
+    "required_artifacts_exist": true
+  },
+  "runtime_snapshot": {
+    "enabled_workers": 4,
+    "healthy_workers": 3,
+    "configured_workers": 5,
+    "disabled_workers": 1,
+    "worker_registry_sha256": "0f8781ea5d19b77c70d03a86fccfa2f921e390691338e424db2d2eadb199918c",
+    "runtime_drift_observed": true
+  },
+  "scope_notes": [
+    "No media file was uploaded.",
+    "No render job_id was created in this study.",
+    "No real output file hash, ffprobe, decode, or browser download was evaluated.",
+    "The UI does not expose per-job worker identity; worker mapping must use authenticated job API plus registry."
+  ],
+  "ai_full_dev": {
+    "project": "green.cutdee.com",
+    "preflight_activity_id": 12082,
+    "during_activity_id": 12084,
+    "closeout_activity_id": 12086,
+    "activities_closed": true,
+    "raw_token_stored": false
+  },
+  "notion_global_rules_read": true,
+  "notion_page": "https://www.notion.so/3435a17a475f818bae05c4dca1bb6aba"
+}

@@ -1,0 +1,44 @@
+{
+  "testcase_id": "PUBLIC_SURFACE_001",
+  "redaction": "Response values containing internal URLs and output record values are summarized, not copied.",
+  "responses": [
+    {
+      "evidence_request_id": "req-health-20260818-134406",
+      "http_status": 200,
+      "content_type": "application/json",
+      "body_shape": {
+        "status": "ok",
+        "service": "v3-cursor-api-gateway",
+        "version": "1.1.0",
+        "worker_count": 5,
+        "healthy_worker_count": 4,
+        "unhealthy_worker_ids": ["wsl-rtx3050-edit"],
+        "internal_urls_present": true
+      }
+    },
+    {
+      "evidence_request_id": "req-cluster-health-20260818-134406",
+      "http_status": 200,
+      "content_type": "application/json",
+      "body_shape": {
+        "ok": true,
+        "healthy": 4,
+        "total": 5,
+        "total_capacity": 9,
+        "active_jobs": 0
+      }
+    },
+    {
+      "evidence_request_id": "req-outputs-20260818-134406",
+      "http_status": 200,
+      "content_type": "application/json",
+      "body_shape": {
+        "top_level_keys": ["outputs"],
+        "outputs_count": 100,
+        "item_keys": ["job_id", "filename", "size", "finished_at", "worker"],
+        "requested_limit": 5,
+        "observed_effective_count": 100
+      }
+    }
+  ]
+}

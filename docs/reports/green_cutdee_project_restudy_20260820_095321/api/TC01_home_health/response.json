@@ -1,0 +1,1 @@
+{"status":"ok","service":"v3-cursor-api-gateway","version":"1.2.0","commit":"f6299fa","total_workers":4,"healthy_workers":4,"configured_workers":6,"disabled_workers":2,"recommended_encoder":"h264_nvenc","available_encoders":["libx264","hevc_videotoolbox","h264_videotoolbox","h264_nvenc","hevc_nvenc"],"disk_free_gb":396.59,"disk_used_pct":52.4}

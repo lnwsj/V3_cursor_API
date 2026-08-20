@@ -1,0 +1,45 @@
+{
+  "schema_version": "1.0",
+  "scope": "read-only public-surface study",
+  "testcases": [
+    {
+      "testcase_id": "PUBLIC_SURFACE_001",
+      "pair_id": "PUBLIC_SURFACE_001__20260818_133756",
+      "description": "Public Green UI plus safe GET API contract observation",
+      "ui_screenshot_minimum": 5,
+      "ui_screenshots": [
+        "screenshots/TC_PUBLIC_01_open_page.png",
+        "screenshots/TC_PUBLIC_02_input_ready.png",
+        "screenshots/TC_PUBLIC_03_click_generate.png",
+        "screenshots/TC_PUBLIC_04_result_state.png",
+        "screenshots/TC_PUBLIC_05_audio_ready_or_error.png"
+      ],
+      "api_files": {
+        "request": "api/PUBLIC_SURFACE_001/request.json",
+        "response": "api/PUBLIC_SURFACE_001/response.json",
+        "timing": "api/PUBLIC_SURFACE_001/timing.json"
+      },
+      "status": "FAIL_INCONSISTENT",
+      "pair_completeness": "PASS",
+      "pair_consistency": "FAIL",
+      "checks": [
+        {"id": "ui_page_http_200", "result": "PASS"},
+        {"id": "ui_real_screenshots_5_of_5", "result": "PASS"},
+        {"id": "api_health_http_200", "result": "PASS"},
+        {"id": "api_cluster_health_http_200", "result": "PASS"},
+        {"id": "api_outputs_http_200", "result": "PASS"},
+        {"id": "gallery_ui_count_equals_api_outputs_count", "result": "FAIL", "observed": "UI 0 vs API 100"},
+        {"id": "ui_version_and_health_schema_match_api", "result": "FAIL", "observed": "UI V1.0.0.20 vs API 1.1.0-cluster; recommended_encoder absent"}
+      ],
+      "render_action": "NOT_EXECUTED_READ_ONLY"
+    }
+  ],
+  "diagnostic_probes": [
+    {"id": "HOST_001", "status": "OBSERVED", "evidence": "logs/host_identity.log"},
+    {"id": "TLS_001", "status": "OBSERVED", "evidence": "logs/network_tls.log"},
+    {"id": "NGINX_001", "status": "WARNINGS", "evidence": "logs/nginx_config.log"},
+    {"id": "LEGACY_001", "status": "FAIL", "evidence": "logs/service_rca.log"},
+    {"id": "SOURCE_001", "status": "OBSERVED", "evidence": "logs/source_lineage.log"},
+    {"id": "SECURITY_001", "status": "CRITICAL_FINDINGS", "evidence": "logs/security_probe.log"}
+  ]
+}

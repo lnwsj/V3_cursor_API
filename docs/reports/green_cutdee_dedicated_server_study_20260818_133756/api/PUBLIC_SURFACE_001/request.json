@@ -1,0 +1,26 @@
+{
+  "testcase_id": "PUBLIC_SURFACE_001",
+  "scope_hash": "420a3edd2ec5a323f62116faf407f3c33c0fd060cffc86bfe7113cceab82eaf7",
+  "captured_at": "2026-08-18T13:44:06+07:00",
+  "redaction": "No Authorization, Cookie, password or token was sent or stored.",
+  "requests": [
+    {
+      "evidence_request_id": "req-health-20260818-134406",
+      "method": "GET",
+      "url": "https://green.cutdee.com/api/health",
+      "headers": {"Authorization": "absent", "Cookie": "absent"}
+    },
+    {
+      "evidence_request_id": "req-cluster-health-20260818-134406",
+      "method": "GET",
+      "url": "https://green.cutdee.com/api/cluster/health",
+      "headers": {"Authorization": "absent", "Cookie": "absent"}
+    },
+    {
+      "evidence_request_id": "req-outputs-20260818-134406",
+      "method": "GET",
+      "url": "https://green.cutdee.com/api/outputs?page=1&limit=5",
+      "headers": {"Authorization": "absent", "Cookie": "absent"}
+    }
+  ]
+}

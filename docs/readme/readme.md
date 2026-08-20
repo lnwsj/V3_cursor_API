@@ -1,0 +1,15 @@
+# Green Cutdee Readme Master Pointer
+
+Project ID: green.cutdee.com
+Project Name: Green Cutdee / V3_cursor_API
+Repo Root: /Users/sj88/Documents/codex/V3_cursor_API
+Environment: local-source + production-observation
+Current Version: UI v1.1.1; API 1.2.0 / f6299fa; repo HEAD ba921c0
+Notion Hub: https://www.notion.so/3435a17a475f818bae05c4dca1bb6aba
+Project Rules: Global Operating Rules
+API Base URL: https://green.cutdee.com/v3api
+Last Updated: 2026-08-20
+
+Use [`/Users/sj88/Documents/codex/V3_cursor_API/docs/README_TH.md`](../README_TH.md) for the human-facing documentation map and [`docs/Readme.md`](../Readme.md) for the project master.
+
+Latest detail: [`2026-08-20.md`](2026-08-20.md)

@@ -1,0 +1,15 @@
+{
+  "request_id": "static-audit-TC01-20260818-131911",
+  "live_response": false,
+  "status": "NOT_EVALUATED",
+  "reference_regression": "120/120",
+  "target_findings": [
+    "progress callback does not read mapping['pct']",
+    "worker output download accepts only output_* filenames while TC01 pipeline names are *_single_*"
+  ],
+  "source_evidence": [
+    "reference/core/pipelines/tc01_chroma.py:128-144",
+    "target/worker/app/backend/core/pipelines/tc01_chroma.py:591-598",
+    "target/worker/app/backend/main.py:515-520"
+  ]
+}

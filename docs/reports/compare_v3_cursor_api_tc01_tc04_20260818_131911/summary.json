@@ -1,0 +1,85 @@
+{
+  "schema_version": "1.0",
+  "task_slug": "compare_v3_cursor_api_tc01_tc04_20260818_131911",
+  "created_at": "2026-08-18T13:19:11+07:00",
+  "project": {
+    "id": "greenpc-v3-cursor",
+    "name": "SJ88 Green Screen",
+    "repo_reference": "/Users/sj88/Documents/codex/V3_cursor",
+    "repo_target": "/Users/sj88/Documents/codex/V3_cursor_API",
+    "environment": "local macOS",
+    "source_of_truth": "reference repo contract/docs plus fresh source probes"
+  },
+  "revisions": {
+    "reference": {
+      "branch": "mac_os",
+      "head": "fdf50f00d67ec79a16f5014c9a15c35114e45dcb",
+      "working_tree_dirty": true
+    },
+    "target": {
+      "branch": "main",
+      "head": "f3ef05e7a83448ac3283f92c6df668e6ac4fbe12",
+      "working_tree_dirty": true,
+      "preexisting_untracked": [
+        "CLAUDE.md"
+      ]
+    }
+  },
+  "verdict": "FAIL_WITH_RCA_AND_ACCEPTANCE_BLOCKER",
+  "acceptance": {
+    "pair_completeness_percent": 0,
+    "pair_consistency_percent": 0,
+    "checks_passed": 0,
+    "checks_total": 4,
+    "critical_errors": 5,
+    "all_required_artifacts": false,
+    "missing_required_artifact_classes": [
+      "target_browser_screenshots"
+    ]
+  },
+  "source_validation": {
+    "reference_regression": {
+      "passed": 120,
+      "total": 120,
+      "verdict": "PASS",
+      "log": "logs/reference_regression.log"
+    },
+    "target_compile_probe": {
+      "passed": 55,
+      "total": 55,
+      "verdict": "PASS",
+      "log": "logs/target_compile_probe.log"
+    },
+    "target_gateway_import": {
+      "verdict": "BLOCKED",
+      "error": "ModuleNotFoundError: No module named 'psycopg2'",
+      "log": "logs/gateway_import.log"
+    },
+    "target_findings": 12
+  },
+  "testcases": {
+    "TC01": "FAIL",
+    "TC02": "FAIL",
+    "TC03": "FAIL",
+    "TC04": "FAIL"
+  },
+  "evidence_policy": {
+    "screenshots_created": 0,
+    "screenshots_reason": "Target repo has no Browser UI; no synthetic screenshots were created.",
+    "api_files_created": 12,
+    "api_live_requests": 0,
+    "pair_bindings_created": 4
+  },
+  "ai_full_dev": {
+    "preflight_activity_id": 12057,
+    "during_analysis_activity_id": 12060,
+    "closeout_activity_id": 12061,
+    "preflight_status_patch": {
+      "requested_invalid_status": "completed_with_boundary",
+      "invalid_patch_http_status": 400,
+      "corrected_status": "blocked",
+      "corrected_patch_http_status": 200,
+      "log": "logs/ai_full_dev.log"
+    }
+  }
+}

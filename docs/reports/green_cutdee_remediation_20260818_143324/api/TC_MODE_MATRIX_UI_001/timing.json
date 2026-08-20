@@ -1,0 +1,9 @@
+{
+  "request_id": "TC_MODE_MATRIX_UI_001-render-guard-20260818T0746Z",
+  "measured_at": "2026-08-18T14:46:00+07:00",
+  "requests": [
+    {"mode": "tc05", "time_total_sec": 0.093273, "time_connect_sec": 0.019201, "time_starttransfer_sec": 0.093174, "timeout_sec": 15},
+    {"mode": "tc06", "time_total_sec": 0.114239, "time_connect_sec": 0.014811, "time_starttransfer_sec": 0.114109, "timeout_sec": 15}
+  ],
+  "result": "auth_guarded; real_render_not_evaluated"
+}

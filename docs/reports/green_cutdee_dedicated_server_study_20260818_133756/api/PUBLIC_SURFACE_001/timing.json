@@ -1,0 +1,9 @@
+{
+  "testcase_id": "PUBLIC_SURFACE_001",
+  "captured_at": "2026-08-18T13:44:06+07:00",
+  "timings_seconds": [
+    {"evidence_request_id": "req-health-20260818-134406", "status": 200, "bytes": 2540, "time_total": 1.305623, "time_connect": 0.046624, "time_starttransfer": 1.305366},
+    {"evidence_request_id": "req-cluster-health-20260818-134406", "status": 200, "bytes": 3273, "time_total": 1.277967, "time_connect": 0.022830, "time_starttransfer": 1.277629},
+    {"evidence_request_id": "req-outputs-20260818-134406", "status": 200, "bytes": 27227, "time_total": 0.114420, "time_connect": 0.017033, "time_starttransfer": 0.113024}
+  ]
+}

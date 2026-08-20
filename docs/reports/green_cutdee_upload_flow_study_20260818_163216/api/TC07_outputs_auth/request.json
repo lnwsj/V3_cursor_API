@@ -1,0 +1,11 @@
+{
+  "request_id": "study-output-guard-20260818-163216",
+  "mode_text_hash": "39c9f3fd1d4325feda612739b69df3e0f684a989b02e8f3dc04cb4fb739427e4",
+  "method": "GET",
+  "url": "https://green.cutdee.com/api/outputs?page=1&limit=5&request_id=study-output-guard-20260818-163216",
+  "headers": {
+    "X-Request-ID": "study-output-guard-20260818-163216"
+  },
+  "body": null,
+  "side_effect": "read-only guard probe"
+}

@@ -1,0 +1,17 @@
+{
+  "pair_id": "TC_LEGACY_ROUTE_SUPPLEMENTAL_001",
+  "screenshot_list": ["screenshots/06_legacy_route_410.png"],
+  "request_files": ["api/TC_LEGACY_ROUTE_SUPPLEMENTAL_001/request.json"],
+  "response_files": ["api/TC_LEGACY_ROUTE_SUPPLEMENTAL_001/response.json"],
+  "timing_files": ["api/TC_LEGACY_ROUTE_SUPPLEMENTAL_001/timing.json"],
+  "request_id": "TC_LEGACY_ROUTE_SUPPLEMENTAL_001-old-20260818T0746Z",
+  "mode": "legacy-public-route",
+  "text_hash": "sha256:legacy-route",
+  "consistency_checks": {
+    "browser_heading_410_gone": true,
+    "api_http_410": true,
+    "legacy_not_proxying_publicly": true
+  },
+  "pair_verdict": "PASS",
+  "gate": "supplemental_infrastructure_probe"
+}

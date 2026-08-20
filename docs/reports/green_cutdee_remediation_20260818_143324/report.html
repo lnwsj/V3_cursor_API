@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="th">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Green Cutdee production remediation — 2026-08-18</title>
+  <style>
+    body{font-family:system-ui,-apple-system,sans-serif;line-height:1.55;margin:0;background:#0b1020;color:#e8eef8}
+    main{max-width:1180px;margin:0 auto;padding:28px} h1,h2{color:#8ee6a5}
+    .verdict{border:1px solid #e2bf68;background:#332b12;padding:14px;border-radius:8px}
+    table{border-collapse:collapse;width:100%;margin:12px 0 24px} th,td{border:1px solid #34405c;padding:8px;text-align:left;vertical-align:top} th{background:#17223b}
+    code,pre{background:#121a2c;border-radius:4px;padding:2px 5px} pre{padding:12px;overflow:auto}
+    img{max-width:100%;border:1px solid #34405c;border-radius:6px;margin:6px 0}
+    .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:12px}.card{background:#121a2c;padding:12px;border-radius:8px}
+  </style>
+</head>
+<body>
+<main>
+  <h1>Green Cutdee production remediation</h1>
+  <p>Target: <a href="https://green.cutdee.com">https://green.cutdee.com</a> · Project: <code>green.cutdee.com</code> · Date: 2026-08-18</p>
+  <div class="verdict"><strong>Verdict: PASS_WITH_SCOPE_NOTE</strong><br>Gateway/frontend/security/legacy-route remediation is verified. This is not a full media-release PASS because real upload/render and authenticated Browser gallery were not evaluated.</div>
+
+  <h2>Acceptance gates</h2>
+  <table><tr><th>Gate</th><th>Result</th><th>Evidence</th></tr>
+    <tr><td>Pair completeness</td><td>100%</td><td><code>pairs/*.json</code></td></tr>
+    <tr><td>Pair consistency</td><td>100%</td><td>UI encoder/disk/auth guard/mode checks bind to API responses</td></tr>
+    <tr><td>Checks</td><td>24/24</td><td><code>test_matrix.json</code></td></tr>
+    <tr><td>Critical errors</td><td>0</td><td>Final service/runtime logs</td></tr>
+  </table>
+
+  <h2>What was fixed</h2>
+  <table><tr><th>Area</th><th>Fix</th><th>Proof</th></tr>
+    <tr><td>Gateway auth/API</td><td>Bearer + HttpOnly session, ownership checks, safe paths, corrected output schema, sanitized health.</td><td><code>gateway/app/backend/main.py:205-303,356,652-680,1015-1044,1200-1320</code></td></tr>
+    <tr><td>Frontend</td><td>Token-required state, no persistent bearer token, TC05/TC06 gallery filters, safe health tooltip, correct download paths.</td><td><code>index.html:901-908,1463-1500,2391-2394,2609</code></td></tr>
+    <tr><td>Nginx</td><td>Removed backup-vhost inclusion, added target headers, disabled public legacy route with 410.</td><td><code>green.cutdee.com.conf:9-12,125-136</code></td></tr>
+    <tr><td>Legacy</td><td>Backed up SQLite, repaired raw/normalized checksum compatibility, stopped duplicate root process, systemd now stable.</td><td><code>legacy-schema.py:604-625</code>; SQLite integrity <code>ok</code></td></tr>
+    <tr><td>Origin security</td><td>Gateway/worker bind to loopback; public Nginx still serves site.</td><td><code>logs/api_probes.log</code>, <code>logs/prod_runtime.log</code></td></tr>
+  </table>
+
+  <h2>Paired test results</h2>
+  <table><tr><th>Pair</th><th>UI</th><th>API</th><th>Verdict</th></tr>
+    <tr><td>TC_HEALTH_UI_001</td><td>v1.1.1, h264_nvenc, 402 GB free, TC01–TC06</td><td><code>/api/health</code> HTTP 200; 4/4 enabled healthy</td><td>PASS</td></tr>
+    <tr><td>TC_AUTH_GUARD_UI_001</td><td>Token required; Render disabled; no false result</td><td><code>/api/outputs</code> without token HTTP 401</td><td>PASS</td></tr>
+    <tr><td>TC_MODE_MATRIX_UI_001</td><td>TC02–TC06 active; empty Render disabled; TC06 audio count 0</td><td>TC05/TC06 render endpoints HTTP 401 without token</td><td>PASS_WITH_SCOPE_NOTE</td></tr>
+    <tr><td>Legacy supplemental</td><td>Browser heading 410 Gone</td><td><code>/old/</code> HTTP 410</td><td>PASS</td></tr>
+  </table>
+
+  <h2>Browser evidence</h2>
+  <div class="grid">
+    <div class="card"><h3>Input ready / health</h3><img src="screenshots/02_input_ready.png" alt="Green Cutdee input ready with TC01-TC06 and health badges"></div>
+    <div class="card"><h3>TC06 audio guard</h3><img src="screenshots/05_audio_ready_or_error.png" alt="TC06 active with audio count zero and Render disabled"></div>
+    <div class="card"><h3>Legacy route closed</h3><img src="screenshots/06_legacy_route_410.png" alt="410 Gone legacy route"></div>
+  </div>
+
+  <h2>Scope notes</h2>
+  <ul>
+    <li>Real media upload/render, output hash, ffprobe, full decode: <strong>NOT_EVALUATED</strong>.</li>
+    <li>Authenticated gallery UI: <strong>NOT_EVALUATED</strong>; secret was not typed into Browser. Authenticated API schema is recorded separately and is not a UI PASS.</li>
+    <li>RTX2050 slot at <code>103.253.73.29:55522</code> is explicitly disabled because its health endpoint was unreachable; configured capacity remains visible as 5 with 1 disabled.</li>
+    <li>Co-host Nginx protocol warnings and host-wide firewall were not changed without owner/port allowlist.</li>
+  </ul>
+
+  <h2>Artifacts</h2>
+  <p><a href="report.md">report.md</a> · <a href="summary.json">summary.json</a> · <a href="test_matrix.json">test_matrix.json</a> · <a href="api/">api/</a> · <a href="pairs/">pairs/</a> · <a href="logs/">logs/</a></p>
+</main>
+</body>
+</html>
