@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="th">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>green.cutdee.com — Dedicated Server Study</title>
+  <style>
+    :root{color-scheme:light dark;--bg:#101419;--fg:#edf2f7;--muted:#aab4c0;--bad:#ff7b72;--warn:#f2cc60;--ok:#7ee787;--card:#18212b}
+    body{font:16px/1.55 system-ui,-apple-system,sans-serif;max-width:1100px;margin:0 auto;padding:28px;background:var(--bg);color:var(--fg)}
+    h1,h2{line-height:1.2} h1{margin-bottom:4px} .muted{color:var(--muted)}
+    .verdict{border:1px solid var(--bad);background:#3a1f24;padding:16px;border-radius:10px;font-weight:700}
+    .card{background:var(--card);border-radius:10px;padding:16px;margin:16px 0}
+    table{border-collapse:collapse;width:100%} th,td{border-bottom:1px solid #34404d;text-align:left;padding:8px;vertical-align:top} th{color:var(--muted)}
+    .fail{color:var(--bad)} .warn{color:var(--warn)} .pass{color:var(--ok)}
+    code{background:#0b0f14;padding:2px 5px;border-radius:4px} a{color:#8cc8ff}
+  </style>
+</head>
+<body>
+  <h1>รายงานศึกษาเชิงลึก — green.cutdee.com</h1>
+  <p class="muted">Dedicated server 103.253.75.161 · 2026-08-18 Asia/Bangkok · read-only</p>
+  <div class="verdict">STUDY_COMPLETE_WITH_CRITICAL_FINDINGS / NO_PRODUCTION_PASS</div>
+
+  <section class="card">
+    <h2>ผลสรุป</h2>
+    <p>Public UI เปิดได้และ API หลักตอบ HTTP 200 แต่ paired UI/API contract ไม่ผ่าน: UI แสดง 0 videos ขณะที่ <code>/api/outputs?page=1&amp;limit=5</code> ให้ 100 records. Legacy service มี migration checksum mismatch และ crash-loop; port 21002 ยังมี detached root process ที่อยู่นอก systemd lifecycle.</p>
+    <p>ไม่มีการส่ง upload/render/cancel หรือคำสั่งเขียนใด ๆ และไม่มีการยืนยัน production render TC01–TC06.</p>
+  </section>
+
+  <section class="card">
+    <h2>Acceptance gate</h2>
+    <table><tbody>
+      <tr><th>Browser screenshots</th><td class="pass">5/5</td></tr>
+      <tr><th>API request/response/timing</th><td class="pass">ครบ</td></tr>
+      <tr><th>Pair completeness</th><td class="pass">100%</td></tr>
+      <tr><th>Pair consistency</th><td class="fail">71.43% — 5/7 checks</td></tr>
+      <tr><th>Critical errors</th><td class="fail">6</td></tr>
+      <tr><th>Render acceptance</th><td class="warn">NOT_EVALUATED_READ_ONLY_NO_INPUT_MEDIA</td></tr>
+    </tbody></table>
+  </section>
+
+  <section class="card">
+    <h2>หลักฐานสำคัญ</h2>
+    <ul>
+      <li>V3 gateway/worker: active; gateway 127.0.0.1:8788, worker 127.0.0.1:8789; cluster healthy 4/5, capacity 9.</li>
+      <li>UI static version <code>V1.0.0.20</code>; API version <code>1.1.0-cluster</code>.</li>
+      <li>Gateway source <code>/opt/v3-cursor-api/gateway/app/backend/main.py:946-960</code> คืน key <code>outputs</code>; UI <code>/var/www/green/v3/index.html:2520-2530</code> อ่าน <code>files</code>.</li>
+      <li><code>sj88-green-cutdee.service</code> restart-loop จาก migration checksum mismatch; detached root runtime บน 21002 ไม่ใช่ MainPID ของ service.</li>
+      <li>Firewall INPUT policy เป็น ACCEPT และ Nginx มี conflicting server-name warnings จาก backup vhost ใน enabled include path.</li>
+    </ul>
+  </section>
+
+  <section class="card">
+    <h2>Evidence bundle</h2>
+    <ul>
+      <li><a href="report.md">report.md</a></li>
+      <li><a href="summary.json">summary.json</a> · <a href="test_matrix.json">test_matrix.json</a></li>
+      <li><a href="pairs/PUBLIC_SURFACE_001__binding.json">pair binding</a></li>
+      <li><a href="api/PUBLIC_SURFACE_001/request.json">API request</a> · <a href="api/PUBLIC_SURFACE_001/response.json">API response</a> · <a href="api/PUBLIC_SURFACE_001/timing.json">timing</a></li>
+      <li><a href="screenshots/TC_PUBLIC_01_open_page.png">UI open page</a> · <a href="screenshots/TC_PUBLIC_02_input_ready.png">input ready</a> · <a href="screenshots/TC_PUBLIC_03_click_generate.png">generate state</a> · <a href="screenshots/TC_PUBLIC_04_result_state.png">result state</a> · <a href="screenshots/TC_PUBLIC_05_audio_ready_or_error.png">audio state</a></li>
+      <li>Logs: <a href="logs/host_identity.log">host</a> · <a href="logs/network_tls.log">network/TLS</a> · <a href="logs/nginx_config.log">Nginx</a> · <a href="logs/service_rca.log">service RCA</a> · <a href="logs/source_lineage.log">lineage</a> · <a href="logs/public_probe.log">public probes</a> · <a href="logs/security_probe.log">security</a></li>
+    </ul>
+  </section>
+
+  <section class="card">
+    <h2>ขอบเขต</h2>
+    <p>Project identity ยืนยันจาก <code>/opt/green.cutdee.com</code>, systemd description, Nginx <code>server_name</code> และ public URL. รายงานนี้เป็นผลจาก fresh origin SSH/DNS/TLS/HTTP/browser probes และ deployed source/config; secrets ถูก redacted.</p>
+    <p>AI Full Dev closeout activity: <code>12066</code> (HTTP 201). สถานะ study: done; production acceptance: blocked.</p>
+  </section>
+</body>
+</html>

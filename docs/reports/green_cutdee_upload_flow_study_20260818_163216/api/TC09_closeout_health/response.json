@@ -1,0 +1,41 @@
+{
+  "request_id": "study-closeout-health-20260818-163216",
+  "mode_text_hash": "20d938c465f31786291048b5ce75cf908c38e05bc5a2794f2da975e055112d68",
+  "http_status": 200,
+  "server_response": {
+    "status": "degraded",
+    "service": "v3-cursor-api-gateway",
+    "version": "1.2.0",
+    "commit": "f6299fa",
+    "total_workers": 4,
+    "healthy_workers": 3,
+    "configured_workers": 5,
+    "disabled_workers": 1,
+    "recommended_encoder": "h264_nvenc",
+    "available_encoders": [
+      "libx264",
+      "h264_videotoolbox",
+      "hevc_videotoolbox",
+      "h264_nvenc",
+      "hevc_nvenc"
+    ],
+    "disk_free_gb": 400.6,
+    "disk_used_pct": 52.0
+  },
+  "cluster_snapshot": {
+    "healthy": 3,
+    "total": 5,
+    "enabled_workers": 4,
+    "disabled_workers": 1,
+    "total_capacity": 5,
+    "active_jobs": 0,
+    "slots": [
+      {"slot": 1, "healthy": true, "enabled": true},
+      {"slot": 2, "healthy": false, "enabled": false},
+      {"slot": 3, "healthy": true, "enabled": true},
+      {"slot": 4, "healthy": false, "enabled": true},
+      {"slot": 5, "healthy": true, "enabled": true}
+    ]
+  },
+  "response_headers_request_id_echoed": false
+}

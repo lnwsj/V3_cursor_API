@@ -1,0 +1,11 @@
+{
+  "request_id": "TC_HEALTH_UI_001-health-20260818T0746Z",
+  "measured_at": "2026-08-18T14:46:00+07:00",
+  "curl": {
+    "time_total_sec": 0.906579,
+    "time_connect_sec": 0.021744,
+    "time_starttransfer_sec": 0.905769
+  },
+  "timeout_sec": 15,
+  "result": "within_timeout"
+}

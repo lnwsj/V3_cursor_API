@@ -871,7 +871,10 @@ def build_reframe_ffmpeg_command(
     elif encoder_codec == "h264_amf":
         cmd += ["-quality", "quality", "-b:v", bitrate]
     elif encoder_codec == "libx264":
-        cmd += ["-preset", "slow", "-crf", "18"]
+        # v3.PERF (2026-08-18): env-overridable preset for batch throughput.
+        # Default "medium" — 2-3× faster than "slow" with minor quality loss.
+        _libx264_preset = os.environ.get("V3_LIBX264_PRESET", "medium").strip() or "medium"
+        cmd += ["-preset", _libx264_preset, "-crf", "18"]
     elif encoder_codec == "h264_videotoolbox":
         # macOS Apple Silicon/Intel H.264 hardware encoder.
         # VideoToolbox is bitrate-driven via -b:v; -prio_speed=1 trades async
@@ -995,6 +998,9 @@ def render_reframe_plan(
     tc_label: str = "",  # TC tag passed to FfmpegRunner watchdog policy
     per_task_timeout_sec: float = 600.0,
     pre_validated_outputs: Optional[set] = None,
+    # v3.PIPELINE (2026-08-18): per-task callback fired when each reframe output is saved.
+    # Enables per-pipeline (producer-consumer) architecture in TC04: reframe→chroma overlap.
+    on_reframe_ready: Optional[Callable[[ReframeResult], None]] = None,
 ) -> List[ReframeResult]:
     """
     Render plan: ทุก source × lens × composition
@@ -1362,6 +1368,13 @@ def render_reframe_plan(
                     pass
             status = "✅" if result.success else f"❌ {result.error[:100]}"
             log(f"[reframe] [{completed}/{total}] {result.task.lens.key}/{result.task.composition.value}: {status}")
+
+            # v3.PIPELINE (2026-08-18): per-pipeline callback for TC04 producer-consumer.
+            if on_reframe_ready and result.success:
+                try:
+                    on_reframe_ready(result)
+                except Exception as _exc:
+                    log(f"[reframe] on_reframe_ready exception: {_exc}")
 
     success_count = sum(1 for r in results if r.success)
     fail_count = len(results) - success_count

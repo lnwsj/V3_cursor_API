@@ -70,6 +70,10 @@ curl -fsS http://127.0.0.1:8788/healthz
 curl -fsS http://127.0.0.1:8789/health
 ```
 
+สองคำสั่งนี้เป็น direct local probe เท่านั้น เมื่อทดสอบ public host ให้ใช้
+`https://green.cutdee.com/v3api/healthz`; root `https://green.cutdee.com/healthz`
+เป็น frontend HTML catch-all ไม่ใช่ JSON gateway health
+
 ## 4. Validation ก่อนส่งงาน
 
 ```bash

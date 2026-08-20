@@ -1,0 +1,30 @@
+{
+  "request_id": "TC_MODE_MATRIX_UI_001-render-guard-20260818T0746Z",
+  "requests": [
+    {
+      "method": "POST",
+      "url": "https://green.cutdee.com/api/render/tc05",
+      "headers": {"Authorization": "ABSENT"},
+      "body": null,
+      "mode": "tc05"
+    },
+    {
+      "method": "POST",
+      "url": "https://green.cutdee.com/api/render/tc06",
+      "headers": {"Authorization": "ABSENT"},
+      "body": null,
+      "mode": "tc06"
+    }
+  ],
+  "ui_binding": {
+    "screenshots": [
+      "screenshots/tc02_input_ready.png",
+      "screenshots/tc03_input_ready.png",
+      "screenshots/tc04_input_ready.png",
+      "screenshots/tc05_input_ready.png",
+      "screenshots/tc06_input_ready.png"
+    ],
+    "selected_modes": ["tc02", "tc03", "tc04", "tc05", "tc06"],
+    "render_button_enabled": false
+  }
+}

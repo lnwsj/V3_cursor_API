@@ -1,0 +1,11 @@
+{
+  "request_id": "study-ui-home-20260818-163216",
+  "mode_text_hash": "81f64b1045bf127328741eb271eac5784c027c2c8f21059ec2f8903b7ba38bc2",
+  "method": "GET",
+  "url": "https://green.cutdee.com/api/health?request_id=study-ui-home-20260818-163216",
+  "headers": {
+    "X-Request-ID": "study-ui-home-20260818-163216"
+  },
+  "body": null,
+  "side_effect": "read-only"
+}

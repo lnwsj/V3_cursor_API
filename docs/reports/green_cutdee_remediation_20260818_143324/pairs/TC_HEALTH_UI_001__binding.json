@@ -1,0 +1,24 @@
+{
+  "pair_id": "TC_HEALTH_UI_001",
+  "screenshot_list": [
+    "screenshots/01_open_page.png",
+    "screenshots/02_input_ready.png",
+    "screenshots/04_result_state.png",
+    "screenshots/05_audio_ready_or_error.png",
+    "screenshots/tc06_input_ready.png"
+  ],
+  "request_files": ["api/TC_HEALTH_UI_001/request.json"],
+  "response_files": ["api/TC_HEALTH_UI_001/response.json"],
+  "timing_files": ["api/TC_HEALTH_UI_001/timing.json"],
+  "request_id": "TC_HEALTH_UI_001-health-20260818T0746Z",
+  "mode": "tc01",
+  "text_hash": "sha256:empty-input-state",
+  "consistency_checks": {
+    "page_version_v1_1_1_matches_api": true,
+    "ui_encoder_h264_nvenc_matches_api": true,
+    "ui_disk_402gb_rounds_api_401_7gb": true,
+    "ui_page_non_blank": true,
+    "api_status_200": true
+  },
+  "pair_verdict": "PASS"
+}

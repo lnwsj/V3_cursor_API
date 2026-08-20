@@ -1,0 +1,13 @@
+{
+  "request_id": "study-ui-tc06-20260818-163216",
+  "mode_text_hash": "b3275e92219f21bae8fa172e24959fdfdec2c0c4d45a2b48cbfe3c20b0cb5467",
+  "method": "POST",
+  "url": "https://green.cutdee.com/api/render/tc06?request_id=study-ui-tc06-20260818-163216",
+  "headers": {
+    "X-Request-ID": "study-ui-tc06-20260818-163216",
+    "Content-Type": "application/json"
+  },
+  "body": {},
+  "files_uploaded": false,
+  "side_effect": "read-only guard probe; no file was uploaded"
+}

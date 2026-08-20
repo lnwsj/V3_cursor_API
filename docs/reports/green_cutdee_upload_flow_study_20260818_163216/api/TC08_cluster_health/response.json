@@ -1,0 +1,22 @@
+{
+  "request_id": "study-cluster-20260818-163216-r2",
+  "mode_text_hash": "20d938c465f31786291048b5ce75cf908c38e05bc5a2794f2da975e055112d68",
+  "http_status": 200,
+  "server_response": {
+    "ok": true,
+    "cluster": [
+      {"slot": 1, "max_concurrent": 2, "active": 0, "healthy": true, "enabled": true},
+      {"slot": 2, "max_concurrent": 2, "active": 0, "healthy": true, "enabled": true},
+      {"slot": 3, "max_concurrent": 2, "active": 0, "healthy": true, "enabled": true},
+      {"slot": 4, "max_concurrent": 1, "active": 0, "healthy": false, "enabled": false},
+      {"slot": 5, "max_concurrent": 1, "active": 0, "healthy": false, "enabled": false}
+    ],
+    "healthy": 3,
+    "total": 5,
+    "enabled_workers": 3,
+    "disabled_workers": 2,
+    "total_capacity": 6,
+    "active_jobs": 0
+  },
+  "response_headers_request_id_echoed": false
+}

@@ -1,0 +1,30 @@
+{
+  "pair_id": "pair_study_TC04_auth_guard",
+  "testcase_id": "STUDY-TC04_OUTPUT_AUTH_GUARD",
+  "evidence_request_id": "restudy-20260820-auth-outputs",
+  "ui": {
+    "screenshots": [
+      "screenshots/01_open_page.png",
+      "screenshots/02_input_ready.png",
+      "screenshots/03_click_generate.png",
+      "screenshots/04_result_state.png",
+      "screenshots/05_audio_ready_or_error.png"
+    ],
+    "mode_text_hash": "sha256:c0513ea82a2263d738a6faba29657878702a704adad2310b9393b8e30babb32d"
+  },
+  "api": {
+    "request": "api/TC04_auth_guard_outputs/request.json",
+    "response": "api/TC04_auth_guard_outputs/response.json",
+    "timing": "api/TC04_auth_guard_outputs/timing.json"
+  },
+  "consistency_checks": {
+    "request_id_binding_match": true,
+    "server_echoed_request_id": false,
+    "mode_text_hash_match": true,
+    "ui_api_origin_match": true,
+    "auth_guard_consistent": true,
+    "notes": "UI shows token required and the unauthenticated API returns HTTP 401 invalid API token."
+  },
+  "pair_complete": true,
+  "pair_verdict": "PASS_WITH_SCOPE_NOTE"
+}

@@ -1,0 +1,11 @@
+{
+  "request_id": "study-cluster-20260818-163216-r2",
+  "mode_text_hash": "20d938c465f31786291048b5ce75cf908c38e05bc5a2794f2da975e055112d68",
+  "method": "GET",
+  "url": "https://green.cutdee.com/api/cluster/health?request_id=study-cluster-20260818-163216-r2",
+  "headers": {
+    "X-Request-ID": "study-cluster-20260818-163216-r2"
+  },
+  "body": null,
+  "side_effect": "read-only"
+}

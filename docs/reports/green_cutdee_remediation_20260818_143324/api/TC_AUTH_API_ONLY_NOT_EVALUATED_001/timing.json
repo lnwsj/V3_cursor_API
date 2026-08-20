@@ -1,0 +1,9 @@
+{
+  "request_id": "TC_AUTH_API_ONLY_NOT_EVALUATED_001-contract-20260818T0746Z",
+  "measured_at": "2026-08-18T14:46:00+07:00",
+  "requests": [
+    {"endpoint": "/api/outputs", "time_total_sec": 0.253241, "time_connect_sec": 0.024780, "time_starttransfer_sec": 0.253127, "timeout_sec": 15},
+    {"endpoint": "/api/auth/session", "time_total_sec": 0.198350, "time_connect_sec": 0.025589, "time_starttransfer_sec": 0.198320, "timeout_sec": 15}
+  ],
+  "result": "API_CONTRACT_ONLY"
+}

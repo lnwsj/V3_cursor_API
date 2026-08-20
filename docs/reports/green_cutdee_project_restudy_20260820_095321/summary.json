@@ -1,0 +1,88 @@
+{
+  "report_id": "green_cutdee_project_restudy_20260820_095321",
+  "generated_at": "2026-08-20T09:59:38+07:00",
+  "project": "green.cutdee.com",
+  "status": "FAIL_WITH_SCOPE_NOTE",
+  "conclusion": "The study and documentation-gap audit completed. A production PASS is not claimed because the UI/API version pair is inconsistent, the local refactor candidate has runtime-risk symbols and placeholder job operations, and real authenticated media flow was not evaluated.",
+  "source_of_truth": {
+    "public_runtime": "https://green.cutdee.com/v3api/openapi.json plus live API responses captured in this report",
+    "repo_head": "git refactor-base at ba921c0 in /Users/sj88/Documents/codex/V3_cursor_API",
+    "local_code_baseline": "25e1032; ba921c0 is docs-only on top of this code",
+    "production_checkout_observation": "/opt/v3-cursor-api on Dedicated Server, remote git HEAD f6299fa",
+    "frontend": "deployed public HTML/JavaScript; frontend source is not present in this checkout"
+  },
+  "release_snapshot": {
+    "ui_label": "v1.1.1",
+    "api_version": "1.2.0",
+    "api_commit": "f6299fa",
+    "local_source_commit": "ba921c0 (repo HEAD); code baseline 25e1032",
+    "remote_gateway_port": 8788,
+    "remote_worker_port": 8789
+  },
+  "acceptance": {
+    "ui_screenshots_per_testcase": {"passed": 8, "total": 8},
+    "api_request_response_timing_triplets": {"passed": 8, "total": 8},
+    "pair_bindings_complete": {"passed": 8, "total": 8},
+    "pair_consistency": {"passed": 7, "total": 8},
+    "checks_passed": 31,
+    "checks_total": 32,
+    "critical_errors": 4,
+    "all_required_artifacts": true,
+    "real_upload_render_download": "NOT_EVALUATED"
+  },
+  "runtime_snapshot": {
+    "configured_workers": 6,
+    "enabled_workers": 4,
+    "healthy_workers": 4,
+    "disabled_workers": 2,
+    "total_capacity": 6,
+    "active_jobs": 0,
+    "recommended_encoder": "h264_nvenc",
+    "disk_free_gb_approx": 396.59
+  },
+  "source_validation": {
+    "unit_tests": "first post-doc-commit full run had 1 transient worker-lifecycle failure; lifecycle file 3/3 reruns passed and next full run was 45 passed with 1 deprecation warning",
+    "compileall": "passed",
+    "git_diff_check": "passed",
+    "ruff_entrypoints": "failed: 89 errors",
+    "gateway_import": "imports and exposes 71 routes / 50 paths, but missing WORKERS_FILE, log, _reconcile_active_jobs, _pick_worker"
+  },
+  "documentation_actions": {
+    "highest_priority": [
+      "รักษาชุด Notion-aligned docs master/index/memory/timesheet/readme/debug_db/report ที่สร้างในรอบนี้ และ resolve exact project registry page ก่อนรอบถัดไป.",
+      "Correct README and Thai guides for /api versus /v3api, /v3api/openapi.json, root /healthz, auth, and 202 enqueue semantics.",
+      "Mark the deep-dive and benchmark as historical snapshots and add a current release-lineage section.",
+      "Document source/live/frontend separation and the actual Dedicated Server service paths.",
+      "Do not document placeholder upload/dispatch/download routes as complete until an authenticated media rerun proves them."
+    ],
+    "files_to_review": [
+      "README.md",
+      "docs/README_TH.md",
+      "docs/V3_CURSOR_API_CURRENT_STATE_AUDIT_TH.md",
+      "docs/V3_CURSOR_API_DEVELOPMENT_GUIDE_TH.md",
+      "docs/V3_CURSOR_API_USER_GUIDE_TH.md",
+      "docs/V3_CURSOR_API_OPERATIONS_RUNBOOK_TH.md",
+      "docs/V3_CURSOR_API_PIPELINE_GUIDE_TH.md",
+      "docs/V3_CURSOR_API_DEEP_DIVE_TH.md",
+      "docs/V3_MAC_M4_SPEED_BENCHMARK_TH.md",
+      "CLAUDE.md",
+      ".github/workflows/ci.yml",
+      "deploy/install.sh"
+    ],
+    "partial_update_commit_detected": "ba921c0",
+    "uncommitted_corrections_from_this_run": true
+  },
+  "security": {
+    "raw_secrets_recorded": false,
+    "auth_token_entered": false,
+    "media_uploaded": false
+  },
+  "ai_full_dev": {
+    "project": "green.cutdee.com",
+    "preflight_activity_id": 12178,
+    "during_activity_id": 12180,
+    "closeout_activity_id": 12181,
+    "docs_extension_activity_id": 12182,
+    "status_patch_http": 200
+  }
+}

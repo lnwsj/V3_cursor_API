@@ -1,0 +1,97 @@
+{
+  "schema_version": "1.0",
+  "task_slug": "compare_v3_cursor_api_tc01_tc04_20260818_131911",
+  "reference_contract": "docs/TC01_TC05_SUMMARY.md",
+  "rows": [
+    {
+      "tc": "TC01",
+      "pair_id": "TC01_compare_20260818_131911",
+      "expected": "Product -> Chroma -> Final",
+      "reference_evidence": [
+        "/Users/sj88/Documents/codex/V3_cursor/docs/TC01_TC05_SUMMARY.md:19-44",
+        "/Users/sj88/Documents/codex/V3_cursor/core/pipelines/tc01_chroma.py:128-144",
+        "/Users/sj88/Documents/codex/V3_cursor/tests/test_pipeline_results_tc01_tc02.py"
+      ],
+      "target_evidence": [
+        "/Users/sj88/Documents/codex/V3_cursor_API/worker/app/backend/core/pipelines/tc01_chroma.py:591-598",
+        "/Users/sj88/Documents/codex/V3_cursor_API/worker/app/backend/main.py:414-452",
+        "/Users/sj88/Documents/codex/V3_cursor_API/worker/app/backend/main.py:515-520"
+      ],
+      "reference_regression": "PASS",
+      "target_static_verdict": "FAIL",
+      "ui_status": "NOT_EVALUATED_NO_UI",
+      "api_status": "NOT_EVALUATED_GATEWAY_IMPORT_BLOCKED",
+      "pair_verdict": "FAIL_INCOMPLETE"
+    },
+    {
+      "tc": "TC02",
+      "pair_id": "TC02_compare_20260818_131911",
+      "expected": "Reframe 7x compositions -> Chroma; 7/14/21 finals",
+      "reference_evidence": [
+        "/Users/sj88/Documents/codex/V3_cursor/docs/TC01_TC05_SUMMARY.md:46-55",
+        "/Users/sj88/Documents/codex/V3_cursor/core/contract.py:109,472,751-789",
+        "/Users/sj88/Documents/codex/V3_cursor/core/pipelines/tc02_reframe.py:407-504",
+        "/Users/sj88/Documents/codex/V3_cursor/tests/test_path_utils_cross_platform.py"
+      ],
+      "target_evidence": [
+        "/Users/sj88/Documents/codex/V3_cursor_API/worker/app/backend/core/contract.py:108-109,646-665,769-789",
+        "/Users/sj88/Documents/codex/V3_cursor_API/worker/app/backend/core/ai_reframe.py:521-525,595-605,783-816,1087-1137",
+        "/Users/sj88/Documents/codex/V3_cursor_API/worker/app/backend/core/pipelines/tc02_reframe.py:410-473"
+      ],
+      "reference_regression": "PASS",
+      "target_static_verdict": "FAIL",
+      "ui_status": "NOT_EVALUATED_NO_UI",
+      "api_status": "NOT_EVALUATED_GATEWAY_IMPORT_BLOCKED",
+      "pair_verdict": "FAIL_INCOMPLETE"
+    },
+    {
+      "tc": "TC03",
+      "pair_id": "TC03_compare_20260818_131911",
+      "expected": "Batch split by segment_duration -> Chroma",
+      "reference_evidence": [
+        "/Users/sj88/Documents/codex/V3_cursor/docs/TC01_TC05_SUMMARY.md:57-70",
+        "/Users/sj88/Documents/codex/V3_cursor/tests/test_pipeline_results_tc03_tc04.py",
+        "/Users/sj88/Documents/codex/V3_cursor/tests/test_tc04_audio_duration.py"
+      ],
+      "target_evidence": [
+        "byte-identical pipeline: core/pipelines/tc03_batch.py SHA256 28a3395916058a99f303b5ec3ff496f7332408eef18e0f596aba2d569031da9e",
+        "/Users/sj88/Documents/codex/V3_cursor_API/gateway/app/backend/main.py:1180-1203",
+        "/Users/sj88/Documents/codex/V3_cursor_API/worker/app/backend/main.py:515-520"
+      ],
+      "reference_regression": "PASS",
+      "target_static_verdict": "FAIL",
+      "ui_status": "NOT_EVALUATED_NO_UI",
+      "api_status": "NOT_EVALUATED_GATEWAY_IMPORT_BLOCKED",
+      "pair_verdict": "FAIL_INCOMPLETE"
+    },
+    {
+      "tc": "TC04",
+      "pair_id": "TC04_compare_20260818_131911",
+      "expected": "Reframe -> Batch split -> Chroma; audio duration policy",
+      "reference_evidence": [
+        "/Users/sj88/Documents/codex/V3_cursor/docs/TC01_TC05_SUMMARY.md:72-89",
+        "/Users/sj88/Documents/codex/V3_cursor/core/pipelines/tc04_rebatch.py:314-344",
+        "/Users/sj88/Documents/codex/V3_cursor/tests/test_pipeline_results_tc03_tc04.py",
+        "/Users/sj88/Documents/codex/V3_cursor/tests/test_tc04_audio_duration.py"
+      ],
+      "target_evidence": [
+        "/Users/sj88/Documents/codex/V3_cursor_API/worker/app/backend/core/pipelines/tc04_rebatch.py:314-326",
+        "/Users/sj88/Documents/codex/V3_cursor_API/gateway/app/backend/main.py:1180-1203",
+        "/Users/sj88/Documents/codex/V3_cursor_API/worker/app/backend/main.py:414-425,515-520"
+      ],
+      "reference_regression": "PASS",
+      "target_static_verdict": "FAIL",
+      "ui_status": "NOT_EVALUATED_NO_UI",
+      "api_status": "NOT_EVALUATED_GATEWAY_IMPORT_BLOCKED",
+      "pair_verdict": "FAIL_INCOMPLETE"
+    }
+  ],
+  "gate_summary": {
+    "reference_tests": "120/120",
+    "target_browser_screenshots": "0/20",
+    "target_live_api_pairs": "0/4",
+    "target_pair_completeness": "0%",
+    "target_pair_consistency": "0%",
+    "target_critical_errors": 5
+  }
+}

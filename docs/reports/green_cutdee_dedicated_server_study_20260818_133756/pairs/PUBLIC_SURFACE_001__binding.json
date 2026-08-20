@@ -1,0 +1,36 @@
+{
+  "pair_id": "PUBLIC_SURFACE_001__20260818_133756",
+  "testcase_id": "PUBLIC_SURFACE_001",
+  "scope_hash": "420a3edd2ec5a323f62116faf407f3c33c0fd060cffc86bfe7113cceab82eaf7",
+  "screenshots": [
+    "screenshots/TC_PUBLIC_01_open_page.png",
+    "screenshots/TC_PUBLIC_02_input_ready.png",
+    "screenshots/TC_PUBLIC_03_click_generate.png",
+    "screenshots/TC_PUBLIC_04_result_state.png",
+    "screenshots/TC_PUBLIC_05_audio_ready_or_error.png"
+  ],
+  "api_files": {
+    "request": "api/PUBLIC_SURFACE_001/request.json",
+    "response": "api/PUBLIC_SURFACE_001/response.json",
+    "timing": "api/PUBLIC_SURFACE_001/timing.json"
+  },
+  "evidence_request_ids": [
+    "req-health-20260818-134406",
+    "req-cluster-health-20260818-134406",
+    "req-outputs-20260818-134406"
+  ],
+  "server_request_id": null,
+  "request_id_match": "EVIDENCE_IDS_MATCH; server did not emit a request-id header",
+  "mode_text_hash_match": "NOT_APPLICABLE_READ_ONLY_SURFACE",
+  "pair_completeness": {"required_screenshots": 5, "actual_screenshots": 5, "required_api_sets": 1, "actual_api_sets": 1, "verdict": "PASS"},
+  "pair_consistency_checks": {
+    "passed": 5,
+    "total": 7,
+    "failed": [
+      "UI gallery 0 does not equal API outputs 100",
+      "UI V1.0.0.20 and expected health field do not match API 1.1.0-cluster shape"
+    ]
+  },
+  "pair_verdict": "FAIL_INCONSISTENT",
+  "render_action": "NOT_EXECUTED_READ_ONLY"
+}

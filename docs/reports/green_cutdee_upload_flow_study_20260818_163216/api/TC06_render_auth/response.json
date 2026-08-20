@@ -1,0 +1,9 @@
+{
+  "request_id": "study-ui-tc06-20260818-163216",
+  "mode_text_hash": "b3275e92219f21bae8fa172e24959fdfdec2c0c4d45a2b48cbfe3c20b0cb5467",
+  "http_status": 401,
+  "server_response": {
+    "detail": "invalid API token"
+  },
+  "response_headers_request_id_echoed": false
+}

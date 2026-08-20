@@ -7,15 +7,14 @@ Standalone, framework-agnostic port from green.sj88ai.com:
   - services/batch_engine.py → _ShufflePool / _CyclePool / no-repeat policy
 
 ความสามารถ:
-  1. split product video เป็น TimeRange segments
+  1. split product video เป�น TimeRange segments
   2. สร้าง ping-pong sequence (F-B-F-B-F) เพื่อ seamless loop
   3. match segments ↔ backgrounds ↔ audios ด้วย 3 modes
-  4. render N outputs พร้อม progress callback
-
-ใช้ได้กับ Green tab ของ AutoMv_A (ไม่ผูกกับ server)
 """
-from __future__ import annotations
 
+
+import concurrent.futures
+import functools
 import math
 import os
 import random
@@ -722,202 +721,262 @@ def render_batch(
     total = len(matches)
     audio_duration_cache: Dict[str, float] = {}
 
-    for i, match in enumerate(matches, 1):
-        if stop_check and stop_check():
-            log(f"[batch] ⏹️ cancelled at output {i}/{total}")
-            break
+    # v3.PARALLEL (2026-08-18): actual parallel chroma execution via ThreadPoolExecutor.
+    # chroma_max_parallel=1 → sequential (original behavior).
+    # chroma_max_parallel>=2 → N ffmpegs run concurrently with thread budget = cpu_budget/N.
+    if chroma_max_parallel <= 1:
+        for i, match in enumerate(matches, 1):
+            if stop_check and stop_check():
+                log(f"[batch] ⏹️ cancelled at output {i}/{total}")
+                break
 
-        if on_match:
-            try:
-                on_match(match)
-            except Exception:
-                pass
-
-        log(f"[batch] [{i}/{total}] {os.path.basename(match.product_path)} "
-            f"segment {match.segment.segment_index} ({'F' if match.segment.is_forward else 'B'}, "
-            f"{match.segment.duration:.1f}s)")
-
-        out_name = (
-            f"batch_{effective_run_stamp}_{match.output_index:03d}_"
-            f"{os.path.splitext(os.path.basename(match.product_path))[0]}.mp4"
-        )
-        out_path = os.path.join(out_dir, out_name)
-
-        # FIX (V1.0.2.14, G3): skip-existing-output. If the caller
-        # confirmed this output is already valid on disk, return a
-        # "skipped" success without invoking ffmpeg. Saves resume time
-        # when only a few outputs are missing.
-        if pre_validated_outputs and os.fspath(out_path) in pre_validated_outputs:
-            log(f"[batch] [{i}/{total}] skipped (pre-validated): {os.path.basename(out_path)}")
             if on_match:
-                try: on_match(match)
-                except Exception: pass
-            results.append(BatchResult(
-                output_index=match.output_index,
-                output_path=out_path,
-                success=True,
-                error="",
-                duration_sec=0.0,
-                match=match,
-                skipped=True,
-            ))
-            continue
-
-        # Adjust GreenSettings for the current segment.
-        seg_settings = GreenSettings(
-            width=base_settings.width,
-            height=base_settings.height,
-            fps=base_settings.fps,
-            bitrate=base_settings.bitrate,
-            encoder_alias=base_settings.encoder_alias,
-            key_color=base_settings.key_color,
-            similarity=base_settings.similarity,
-            blend=base_settings.blend,
-            despill=base_settings.despill,
-            despill_screen=base_settings.despill_screen,
-            cover_enabled=base_settings.cover_enabled,
-            cover_duration=base_settings.cover_duration,
-            cover_scale=base_settings.cover_scale,
-            audio_source=base_settings.audio_source,
-            preset=base_settings.preset,
-        )
-
-        # Extract a sub-clip that matches the segment direction.
-        try:
-            extract_encoder = base_settings.encoder_alias
-            log(
-                f"[batch] extract segment direction={'forward' if match.segment.is_forward else 'backward'} "
-                f"encoder_alias={extract_encoder}"
-            )
-            sub_clip = _extract_segment(
-                match.product_path,
-                match.segment,
-                out_dir,
-                ffmpeg_cmd=ffmpeg_cmd,
-                ffprobe_cmd=ffprobe_cmd,
-                encoder_alias=base_settings.encoder_alias,
-                stop_check=stop_check,
-                on_log=log,
-                tc_label=tc_label,
-                run_stamp=effective_run_stamp,
-            )
-        except _BatchCancelled as e:
-            log(f"[batch] cancelled during segment extract: {e}")
-            results.append(BatchResult(
-                output_index=match.output_index,
-                output_path=out_path,
-                success=False,
-                error=str(e),
-                cancelled=True,
-                match=match,
-            ))
-            break
-        except Exception as e:
-            log(f"[batch] ❌ extract segment failed: {e}")
-            results.append(BatchResult(
-                output_index=match.output_index,
-                output_path=out_path,
-                success=False,
-                error=f"extract: {e}",
-                match=match,
-            ))
-            continue
-
-        # Render
-        def prog_cb(p: FfmpegProgress, _i=i, _total=total):
-            if on_progress:
                 try:
-                    on_progress(_i, _total, p)
+                    on_match(match)
                 except Exception:
                     pass
 
-        target_duration_sec: Optional[float] = None
-        ping_pong_product_to_target = False
-        if batch_settings.uploaded_audio_controls_duration and match.audio_path:
-            audio_key = os.fspath(match.audio_path)
-            if audio_key not in audio_duration_cache:
-                try:
-                    probed_duration = probe_audio_duration(audio_key, ffprobe_cmd)
-                except Exception:
-                    probed_duration = None
-                if probed_duration is not None:
-                    try:
-                        numeric_duration = float(probed_duration)
-                    except (TypeError, ValueError, OverflowError):
-                        numeric_duration = 0.0
-                else:
-                    numeric_duration = 0.0
-                audio_duration_cache[audio_key] = numeric_duration
-            target_duration_sec = audio_duration_cache[audio_key]
-            if not math.isfinite(target_duration_sec) or target_duration_sec <= 0:
-                message = f"audio duration probe failed: {audio_key}"
-                log(f"[batch] output {i}/{total} failed: {message}")
+            log(f"[batch] [{i}/{total}] {os.path.basename(match.product_path)} "
+                f"segment {match.segment.segment_index} ({'F' if match.segment.is_forward else 'B'}, "
+                f"{match.segment.duration:.1f}s)")
+
+            out_name = (
+                f"batch_{effective_run_stamp}_{match.output_index:03d}_"
+                f"{os.path.splitext(os.path.basename(match.product_path))[0]}.mp4"
+            )
+            out_path = os.path.join(out_dir, out_name)
+
+            # FIX (V1.0.2.14, G3): skip-existing-output. If the caller
+            # confirmed this output is already valid on disk, return a
+            # "skipped" success without invoking ffmpeg. Saves resume time
+            # when only a few outputs are missing.
+            if pre_validated_outputs and os.fspath(out_path) in pre_validated_outputs:
+                log(f"[batch] [{i}/{total}] skipped (pre-validated): {os.path.basename(out_path)}")
+                if on_match:
+                    try: on_match(match)
+                    except Exception: pass
+                results.append(BatchResult(
+                    output_index=match.output_index,
+                    output_path=out_path,
+                    success=True,
+                    error="",
+                    duration_sec=0.0,
+                    match=match,
+                    skipped=True,
+                ))
+                continue
+
+            # Adjust GreenSettings for the current segment.
+            seg_settings = GreenSettings(
+                width=base_settings.width,
+                height=base_settings.height,
+                fps=base_settings.fps,
+                bitrate=base_settings.bitrate,
+                encoder_alias=base_settings.encoder_alias,
+                key_color=base_settings.key_color,
+                similarity=base_settings.similarity,
+                blend=base_settings.blend,
+                despill=base_settings.despill,
+                despill_screen=base_settings.despill_screen,
+                cover_enabled=base_settings.cover_enabled,
+                cover_duration=base_settings.cover_duration,
+                cover_scale=base_settings.cover_scale,
+                audio_source=base_settings.audio_source,
+                preset=base_settings.preset,
+            )
+
+            # Extract a sub-clip that matches the segment direction.
+            try:
+                extract_encoder = base_settings.encoder_alias
+                log(
+                    f"[batch] extract segment direction={'forward' if match.segment.is_forward else 'backward'} "
+                    f"encoder_alias={extract_encoder}"
+                )
+                sub_clip = _extract_segment(
+                    match.product_path,
+                    match.segment,
+                    out_dir,
+                    ffmpeg_cmd=ffmpeg_cmd,
+                    ffprobe_cmd=ffprobe_cmd,
+                    encoder_alias=base_settings.encoder_alias,
+                    stop_check=stop_check,
+                    on_log=log,
+                    tc_label=tc_label,
+                    run_stamp=effective_run_stamp,
+                )
+            except _BatchCancelled as e:
+                log(f"[batch] cancelled during segment extract: {e}")
                 results.append(BatchResult(
                     output_index=match.output_index,
                     output_path=out_path,
                     success=False,
-                    error=message,
+                    error=str(e),
+                    cancelled=True,
                     match=match,
                 ))
+                break
+            except Exception as e:
+                log(f"[batch] ❌ extract segment failed: {e}")
+                results.append(BatchResult(
+                    output_index=match.output_index,
+                    output_path=out_path,
+                    success=False,
+                    error=f"extract: {e}",
+                    match=match,
+                ))
+                continue
+
+            # Render
+            def prog_cb(p: FfmpegProgress, _i=i, _total=total):
+                if on_progress:
+                    try:
+                        on_progress(_i, _total, p)
+                    except Exception:
+                        pass
+
+            target_duration_sec: Optional[float] = None
+            ping_pong_product_to_target = False
+            if batch_settings.uploaded_audio_controls_duration and match.audio_path:
+                audio_key = os.fspath(match.audio_path)
+                if audio_key not in audio_duration_cache:
+                    try:
+                        probed_duration = probe_audio_duration(audio_key, ffprobe_cmd)
+                    except Exception:
+                        probed_duration = None
+                    if probed_duration is not None:
+                        try:
+                            numeric_duration = float(probed_duration)
+                        except (TypeError, ValueError, OverflowError):
+                            numeric_duration = 0.0
+                    else:
+                        numeric_duration = 0.0
+                    audio_duration_cache[audio_key] = numeric_duration
+                target_duration_sec = audio_duration_cache[audio_key]
+                if not math.isfinite(target_duration_sec) or target_duration_sec <= 0:
+                    message = f"audio duration probe failed: {audio_key}"
+                    log(f"[batch] output {i}/{total} failed: {message}")
+                    results.append(BatchResult(
+                        output_index=match.output_index,
+                        output_path=out_path,
+                        success=False,
+                        error=message,
+                        match=match,
+                    ))
+                    _safe_remove(sub_clip)
+                    continue
+                ping_pong_product_to_target = True
+                log(
+                    f"[batch] Audio master: source_segment={match.segment.duration:.3f}s "
+                    f"final={target_duration_sec:.3f}s"
+                )
+
+            try:
+                result = render_green(
+                    cover=match.cover_path,
+                    product=sub_clip,
+                    background=match.background_path,
+                    audio=match.audio_path,
+                    out_path=out_path,
+                    settings=seg_settings,
+                    on_log=log,
+                    on_progress=prog_cb,
+                    stop_check=stop_check,
+                    ffmpeg_cmd=ffmpeg_cmd,
+                    ffprobe_cmd=ffprobe_cmd,
+                    tc_label=tc_label,
+                    chroma_max_parallel=chroma_max_parallel,
+                    target_duration_sec=target_duration_sec,
+                    ping_pong_product_to_target=ping_pong_product_to_target,
+                )
+            except Exception as e:
+                log(f"[batch] ❌ render failed: {e}")
+                results.append(BatchResult(
+                    output_index=match.output_index,
+                    output_path=out_path,
+                    success=False,
+                    error=f"render: {e}",
+                    match=match,
+                ))
+                # cleanup sub_clip
                 _safe_remove(sub_clip)
                 continue
-            ping_pong_product_to_target = True
-            log(
-                f"[batch] Audio master: source_segment={match.segment.duration:.3f}s "
-                f"final={target_duration_sec:.3f}s"
-            )
 
-        try:
-            result = render_green(
-                cover=match.cover_path,
-                product=sub_clip,
-                background=match.background_path,
-                audio=match.audio_path,
-                out_path=out_path,
-                settings=seg_settings,
-                on_log=log,
-                on_progress=prog_cb,
-                stop_check=stop_check,
-                ffmpeg_cmd=ffmpeg_cmd,
-                ffprobe_cmd=ffprobe_cmd,
-                tc_label=tc_label,
-                chroma_max_parallel=chroma_max_parallel,
-                target_duration_sec=target_duration_sec,
-                ping_pong_product_to_target=ping_pong_product_to_target,
-            )
-        except Exception as e:
-            log(f"[batch] ❌ render failed: {e}")
+            # cleanup sub_clip
+            _safe_remove(sub_clip)
+
             results.append(BatchResult(
                 output_index=match.output_index,
                 output_path=out_path,
-                success=False,
-                error=f"render: {e}",
-                match=match,
+                success=result.success,
+                error=result.error,
+                duration_sec=result.duration_sec,
+                cancelled=bool(getattr(result, "cancelled", False)),
             ))
-            # cleanup sub_clip
-            _safe_remove(sub_clip)
-            continue
 
-        # cleanup sub_clip
-        _safe_remove(sub_clip)
+            if result.success:
+                log(f"[batch] ✅ {os.path.basename(out_path)}")
+            elif bool(getattr(result, "cancelled", False)):
+                log(f"[batch] cancelled during output {i}/{total}")
+                break
+            else:
+                log(f"[batch] ❌ output {i}/{total} failed: {result.error[:200]}")
 
-        results.append(BatchResult(
-            output_index=match.output_index,
-            output_path=out_path,
-            success=result.success,
-            error=result.error,
-            duration_sec=result.duration_sec,
-            cancelled=bool(getattr(result, "cancelled", False)),
-        ))
+        success_count = sum(1 for r in results if r.success)
+        cancelled_count = sum(1 for r in results if r.cancelled)
+        fail_count = len(results) - success_count - cancelled_count
+        log(
+            f"[batch] done: {success_count} ok, {fail_count} fail, "
+            f"{cancelled_count} cancelled (of {total})"
+        )
+        return results
 
-        if result.success:
-            log(f"[batch] ✅ {os.path.basename(out_path)}")
-        elif bool(getattr(result, "cancelled", False)):
-            log(f"[batch] cancelled during output {i}/{total}")
-            break
-        else:
-            log(f"[batch] ❌ output {i}/{total} failed: {result.error[:200]}")
+    # Parallel path: N chromas concurrent (v3.PARALLEL 2026-08-18).
+    # Each match → its own ffmpeg in ThreadPoolExecutor.
+    log(f"[batch] parallel mode: {chroma_max_parallel} concurrent chromas over {total} matches")
+    parallel_results: List[BatchResult] = []
 
+    # v3.PIPELINE (2026-08-18): use functools.partial to pass context to workers
+    import functools
+    process_match = functools.partial(
+        _process_one_match,
+        matches=matches,
+        out_dir=out_dir,
+        base_settings=base_settings,
+        batch_settings=batch_settings,
+        audio_duration_cache=audio_duration_cache,
+        effective_run_stamp=effective_run_stamp,
+        on_match=on_match,
+        on_progress=on_progress,
+        stop_check=stop_check,
+        ffmpeg_cmd=ffmpeg_cmd,
+        ffprobe_cmd=ffprobe_cmd,
+        tc_label=tc_label,
+        chroma_max_parallel=chroma_max_parallel,
+        pre_validated_outputs=pre_validated_outputs,
+        log_fn=log,
+    )
+
+    with concurrent.futures.ThreadPoolExecutor(
+        max_workers=chroma_max_parallel,
+        thread_name_prefix="batch-chroma-",
+    ) as ex:
+        future_to_match = {ex.submit(process_match, m): m for m in matches}
+        for fut in concurrent.futures.as_completed(future_to_match):
+            try:
+                result = fut.result()
+            except Exception as exc:
+                match = future_to_match[fut]
+                parallel_results.append(BatchResult(
+                    output_index=match.output_index,
+                    output_path="",
+                    success=False,
+                    error=f"executor: {exc}",
+                    match=match,
+                ))
+                continue
+            parallel_results.append(result)
+
+    results = sorted(parallel_results, key=lambda r: r.output_index)
     success_count = sum(1 for r in results if r.success)
     cancelled_count = sum(1 for r in results if r.cancelled)
     fail_count = len(results) - success_count - cancelled_count
@@ -926,6 +985,167 @@ def render_batch(
         f"{cancelled_count} cancelled (of {total})"
     )
     return results
+
+
+def _process_one_match(
+    match: BatchMatch,
+    matches: List[BatchMatch],
+    out_dir: str,
+    base_settings,
+    batch_settings,
+    audio_duration_cache: Dict[str, float],
+    effective_run_stamp: str,
+    on_match,
+    on_progress,
+    stop_check,
+    ffmpeg_cmd: str,
+    ffprobe_cmd: str,
+    tc_label: str,
+    chroma_max_parallel: int,
+    pre_validated_outputs,
+    log_fn,
+) -> BatchResult:
+    """Process one BatchMatch (segment extract + chroma). For parallel executor."""
+    total = len(matches)
+    log = log_fn
+    out_name = (
+        f"batch_{effective_run_stamp}_{match.output_index:03d}_"
+        f"{os.path.splitext(os.path.basename(match.product_path))[0]}.mp4"
+    )
+    out_path = os.path.join(out_dir, out_name)
+
+    if on_match:
+        try:
+            on_match(match)
+        except Exception:
+            pass
+
+    log(f"[batch] [{match.output_index+1}/{total}] {os.path.basename(match.product_path)} "
+        f"segment {match.segment.segment_index} ({'F' if match.segment.is_forward else 'B'}, "
+        f"{match.segment.duration:.1f}s) parallel")
+
+    if pre_validated_outputs and os.fspath(out_path) in pre_validated_outputs:
+        log(f"[batch] [{match.output_index+1}/{total}] skipped (pre-validated)")
+        return BatchResult(
+            output_index=match.output_index,
+            output_path=out_path,
+            success=True, error="", duration_sec=0.0,
+            match=match, skipped=True,
+        )
+
+    seg_settings = GreenSettings(
+        width=base_settings.width,
+        height=base_settings.height,
+        fps=base_settings.fps,
+        bitrate=base_settings.bitrate,
+        encoder_alias=base_settings.encoder_alias,
+        key_color=base_settings.key_color,
+        similarity=base_settings.similarity,
+        blend=base_settings.blend,
+        despill=base_settings.despill,
+        despill_screen=base_settings.despill_screen,
+        cover_enabled=base_settings.cover_enabled,
+        cover_duration=base_settings.cover_duration,
+        cover_scale=base_settings.cover_scale,
+        audio_source=base_settings.audio_source,
+        preset=base_settings.preset,
+    )
+
+    try:
+        sub_clip = _extract_segment(
+            match.product_path,
+            match.segment,
+            out_dir,
+            ffmpeg_cmd=ffmpeg_cmd,
+            ffprobe_cmd=ffprobe_cmd,
+            encoder_alias=base_settings.encoder_alias,
+            stop_check=stop_check,
+            on_log=log,
+            tc_label=tc_label,
+            run_stamp=effective_run_stamp,
+        )
+    except _BatchCancelled as e:
+        return BatchResult(
+            output_index=match.output_index, output_path=out_path,
+            success=False, error=str(e), cancelled=True, match=match,
+        )
+    except Exception as e:
+        return BatchResult(
+            output_index=match.output_index, output_path=out_path,
+            success=False, error=f"extract: {e}", match=match,
+        )
+
+    def prog_cb(p, _idx=match.output_index, _total=total):
+        if on_progress:
+            try:
+                on_progress(_idx + 1, _total, p)
+            except Exception:
+                pass
+
+    target_duration_sec = None
+    ping_pong_product_to_target = False
+    if batch_settings.uploaded_audio_controls_duration and match.audio_path:
+        audio_key = os.fspath(match.audio_path)
+        if audio_key not in audio_duration_cache:
+            try:
+                probed_duration = probe_audio_duration(audio_key, ffprobe_cmd)
+            except Exception:
+                probed_duration = None
+            if probed_duration is not None:
+                try:
+                    numeric_duration = float(probed_duration)
+                except (TypeError, ValueError, OverflowError):
+                    numeric_duration = 0.0
+            else:
+                numeric_duration = 0.0
+            audio_duration_cache[audio_key] = numeric_duration
+        target_duration_sec = audio_duration_cache[audio_key]
+        if not math.isfinite(target_duration_sec) or target_duration_sec <= 0:
+            _safe_remove(sub_clip)
+            return BatchResult(
+                output_index=match.output_index, output_path=out_path,
+                success=False, error="audio duration probe failed", match=match,
+            )
+        ping_pong_product_to_target = True
+
+    try:
+        result = render_green(
+            cover=match.cover_path,
+            product=sub_clip,
+            background=match.background_path,
+            audio=match.audio_path,
+            out_path=out_path,
+            settings=seg_settings,
+            on_log=log,
+            on_progress=prog_cb,
+            stop_check=stop_check,
+            ffmpeg_cmd=ffmpeg_cmd,
+            ffprobe_cmd=ffprobe_cmd,
+            tc_label=tc_label,
+            chroma_max_parallel=chroma_max_parallel,
+            target_duration_sec=target_duration_sec,
+            ping_pong_product_to_target=ping_pong_product_to_target,
+        )
+    except Exception as e:
+        _safe_remove(sub_clip)
+        return BatchResult(
+            output_index=match.output_index, output_path=out_path,
+            success=False, error=f"render: {e}", match=match,
+        )
+
+    _safe_remove(sub_clip)
+    if result.success:
+        log(f"[batch] ✅ {os.path.basename(out_path)}")
+    else:
+        log(f"[batch] ❌ output {match.output_index+1}/{total} failed: {result.error[:200]}")
+    return BatchResult(
+        output_index=match.output_index,
+        output_path=out_path,
+        success=result.success,
+        error=result.error,
+        duration_sec=result.duration_sec,
+        cancelled=bool(getattr(result, "cancelled", False)),
+    )
 
 
 # ==================== Helpers ====================

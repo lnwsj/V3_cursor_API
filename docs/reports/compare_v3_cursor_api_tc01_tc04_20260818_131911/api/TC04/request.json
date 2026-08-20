@@ -1,0 +1,9 @@
+{
+  "request_id": "static-audit-TC04-20260818-131911",
+  "live_request": false,
+  "method": "POST",
+  "target_endpoint": "/api/tc04/render",
+  "mode": "tc04",
+  "input_contract": "Reframe -> Batch split -> Chroma; audio may set final duration",
+  "reason_not_live": "Target gateway could not be imported because psycopg2 is unavailable; target has no Browser UI."
+}

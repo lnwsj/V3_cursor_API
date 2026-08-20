@@ -1,0 +1,9 @@
+{
+  "request_id": "study-output-guard-20260818-163216",
+  "mode_text_hash": "39c9f3fd1d4325feda612739b69df3e0f684a989b02e8f3dc04cb4fb739427e4",
+  "http_status": 401,
+  "server_response": {
+    "detail": "invalid API token"
+  },
+  "response_headers_request_id_echoed": false
+}

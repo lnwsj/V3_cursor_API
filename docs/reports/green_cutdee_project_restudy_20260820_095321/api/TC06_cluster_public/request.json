@@ -1,0 +1,9 @@
+{
+  "method": "GET",
+  "url": "https://green.cutdee.com/api/cluster/public?hours=24",
+  "headers": {
+    "Accept": "application/json"
+  },
+  "body": null,
+  "auth": "none"
+}

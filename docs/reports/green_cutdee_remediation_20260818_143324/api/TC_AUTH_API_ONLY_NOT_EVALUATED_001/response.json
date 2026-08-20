@@ -1,0 +1,19 @@
+{
+  "request_id": "TC_AUTH_API_ONLY_NOT_EVALUATED_001-contract-20260818T0746Z",
+  "responses": [
+    {
+      "endpoint": "/api/outputs",
+      "http_status": 200,
+      "body_schema": ["files", "limit", "outputs", "page", "pages", "total"],
+      "total": 11,
+      "limit": 5,
+      "item_schema": ["filename", "finished_at", "job_id", "mtime_iso", "path", "size", "tc"]
+    },
+    {
+      "endpoint": "/api/auth/session",
+      "http_status": 200,
+      "body": {"ok": true, "user": "admin", "expires_in": 28800}
+    }
+  ],
+  "verdict": "NOT_EVALUATED_FOR_UI"
+}

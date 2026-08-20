@@ -1,0 +1,17 @@
+{
+  "request_id": "TC_HEALTH_UI_001-health-20260818T0746Z",
+  "http_status": 200,
+  "body": {
+    "status": "ok",
+    "service": "v3-cursor-api-gateway",
+    "version": "1.1.1",
+    "total_workers": 4,
+    "healthy_workers": 4,
+    "configured_workers": 5,
+    "disabled_workers": 1,
+    "recommended_encoder": "h264_nvenc",
+    "available_encoders": ["libx264", "h264_nvenc", "av1_nvenc", "hevc_nvenc", "h264_videotoolbox", "hevc_videotoolbox"],
+    "disk_free_gb": 401.7,
+    "disk_used_pct": 51.9
+  }
+}

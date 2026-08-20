@@ -1,0 +1,10 @@
+{
+  "method": "GET",
+  "url": "https://green.cutdee.com/api/health?request_id=restudy-20260820-home-health",
+  "headers": {
+    "Accept": "application/json"
+  },
+  "body": null,
+  "request_id": "restudy-20260820-home-health",
+  "auth": "none"
+}

@@ -18,10 +18,13 @@
 ## Source Snapshot
 
 - Branch: `refactor-base`
-- HEAD: `25e1032` (`fix(gateway): repair router package after Phase 3 refactor`)
-- `origin/refactor-base`: `1853df0`
+- Repo HEAD: `ba921c0` (`docs: audit current Gateway refactor state`)
+- Code baseline under audit: `25e1032` (`fix(gateway): repair router package after Phase 3 refactor`); `ba921c0` is docs-only on top of that code
+- `origin/refactor-base`: `ba921c0`
 - Refactor sequence: services extraction -> router extraction -> compatibility shims
 - Working tree มี `CLAUDE.md` ที่แก้ค้าง และ untracked local/report artifacts; audit นี้ไม่แก้หรือ stage ไฟล์เหล่านั้น
+
+หลักฐาน public UI/API รอบล่าสุดอยู่ใน [`docs/reports/green_cutdee_project_restudy_20260820_095321/`](reports/green_cutdee_project_restudy_20260820_095321/). รายงานนี้แยก UI `v1.1.1` ออกจาก API `1.2.0 / f6299fa`, บันทึก `/v3api/openapi.json`, และบันทึกว่า root `/healthz` เป็น frontend HTML ขณะที่ `/v3api/healthz` เป็น JSON API health
 
 ## Production Snapshot
 
@@ -84,7 +87,7 @@ Current router มี `/api/render/{tc}` ซึ่งอ่าน multipart แ�
 | Surface | Source ปัจจุบัน | เอกสารควรเรียกว่า |
 |---|---|---|
 | Worker `/health`, `/v1/*` | มี route และ Worker core ตอบได้ | internal worker contract; ต้องตรวจ token/network |
-| Gateway `/healthz`, version, cluster health | มี route ใน router | public liveness/summary; ไม่ใช่ render acceptance |
+| Gateway `/healthz`, version, cluster health | มี route ใน router | direct gateway liveness/summary; เมื่อเรียกผ่าน public root ให้ใช้ `/v3api/healthz` เพราะ root `/healthz` ถูก frontend catch-all ตอบเป็น HTML |
 | `/api/v1/uploads/{role}` | route มี แต่มี P0 `NameError` | blocked until upload smoke passes |
 | `/api/v1/jobs` | model/dispatch wiring ไม่ครบ | legacy/blocked in current refactor |
 | `/api/render/{tc}` | multipart echo/compatibility handler | compatibility placeholder, not render proof |

@@ -1,0 +1,9 @@
+{
+  "method": "GET",
+  "url": "https://green.cutdee.com/v3api/healthz",
+  "headers": {
+    "Accept": "application/json"
+  },
+  "body": null,
+  "auth": "none"
+}

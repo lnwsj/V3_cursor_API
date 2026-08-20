@@ -14,6 +14,11 @@ AUTH=(-H "Authorization: Bearer $API_KEY")
 
 ถ้าเรียก local development ให้ใช้ `BASE=http://127.0.0.1:8788` และถ้าเรียก Worker โดยตรงต้องใช้ internal token แทน Bearer token
 
+สำหรับ public Green Cutdee ที่ตรวจเมื่อ 2026-08-20 ให้ใช้ `BASE=https://green.cutdee.com/v3api`
+เฉพาะ endpoint ใน API proxy และจำไว้ว่า frontend ที่ root เรียก `/api/...` โดยตรง
+เอกสารนี้ยังไม่เปลี่ยน target dynamic contract เป็น production PASS เพราะ source refactor
+ยัง release-blocked
+
 ## 2. Authentication
 
 มีสองรูปแบบหลัก:
@@ -204,12 +209,15 @@ Dry-run คำนวณจำนวน stage/output จาก settings แต่
 Public health:
 
 ```text
-GET /healthz
+GET /healthz                 # direct gateway only
 GET /api/health
 GET /api/version
 GET /api/cluster/health
 GET /api/cluster/public
 ```
+
+บน public host ให้ใช้ `GET /v3api/healthz` สำหรับ JSON health; `GET /healthz`
+ที่ root public เป็น HTML ของ frontend และ `GET /openapi.json` ก็เป็น HTML เช่นกัน
 
 ## 9. สถานะและ error ที่พบบ่อย
 

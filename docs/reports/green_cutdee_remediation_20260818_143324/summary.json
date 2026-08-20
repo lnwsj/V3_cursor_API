@@ -1,0 +1,63 @@
+{
+  "task_slug": "green_cutdee_remediation",
+  "generated_at": "2026-08-18T14:46:30+07:00",
+  "target": {
+    "site": "https://green.cutdee.com",
+    "server": "103.253.75.161",
+    "project": "green.cutdee.com",
+    "source_repo": "/Users/sj88/Documents/codex/V3_cursor_API"
+  },
+  "source_of_truth": [
+    "deployed hashes and systemd runtime on 103.253.75.161",
+    "https://green.cutdee.com",
+    "Browser screenshot and DOM evidence in this bundle",
+    "paired API request/response/timing evidence in this bundle"
+  ],
+  "baseline_report": "docs/reports/green_cutdee_dedicated_server_study_20260818_133756",
+  "verdict": "PASS_WITH_SCOPE_NOTE",
+  "scope": "Observable gateway/frontend/security/legacy-route remediation is verified. This is not a full media-release PASS.",
+  "checks_passed": 24,
+  "checks_total": 24,
+  "critical_errors": 0,
+  "pair_completeness_pct": 100.0,
+  "pair_consistency_pct": 100.0,
+  "render_evaluated": false,
+  "authenticated_browser_gallery_evaluated": false,
+  "required_artifacts": {
+    "report.md": true,
+    "report.html": true,
+    "summary.json": true,
+    "test_matrix.json": true,
+    "screenshots": true,
+    "api": true,
+    "pairs": true,
+    "logs": true
+  },
+  "scope_notes": [
+    "TC01-TC06 UI mode selection and auth guard were tested; no real media upload/render was performed in this remediation run.",
+    "The RTX2050 worker at 103.253.73.29:55522 was unreachable from the dedicated server, so only that registry slot was disabled and capacity is explicitly reported as 4 healthy of 5 configured.",
+    "The browser did not receive a secret API token; authenticated gallery UI is NOT_EVALUATED. Authenticated API contract was checked separately with redacted request evidence.",
+    "Nginx target green.cutdee.com warnings are gone. Remaining protocol-option warnings belong to co-hosted sites and were not changed without their owner/allowlist.",
+    "The broad host firewall policy was not changed because the server has many co-hosted listeners; V3 origin ports are protected by loopback binding instead."
+  ],
+  "deployed_hashes": {
+    "gateway_main_py": "28176a999c0bd676b12d233a99ef848e2e71fb661d9acebbabf1f9f7dac30044",
+    "frontend_index_html": "15730f4dbb9d423425210670e74b194e99a3d0f707485887f1799550455b237d",
+    "frontend_api_js": "c1f49d325f6019d7e990468db0f26aec384b20d73a35aafdc2c0a53713b5961c",
+    "nginx_vhost": "cdf28a50f0917bf8b97279c7083a8c7b05fa9d34b59a433c20467633357c3ec0",
+    "legacy_schema_py": "470ca8bb461e2b4e7614d975d8f30a614a591a297dc34930e4d3ac8ded7b469d",
+    "workers_json": "af1f820e3806b2ec9afc312607af0cdcec8c1ba73258cc61883071cecc29583c"
+  },
+  "ai_full_dev": {
+    "preflight_activity_id": 12067,
+    "during_activity_id": 12069,
+    "closeout_activity_id": 12070,
+    "during_status_patch": {"endpoint": "/api/activities/12069/status", "http": 200, "body": {"ok": true}},
+    "during_failed_attempts": [
+      {"http": 400, "response": "Field 'title' is required"},
+      {"http": 500, "response": "server HTML error"}
+    ],
+    "closeout": "posted",
+    "closeout_http": 201
+  }
+}
