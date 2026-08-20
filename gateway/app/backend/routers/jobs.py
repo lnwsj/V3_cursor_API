@@ -150,6 +150,7 @@ async def create_job(req: CreateJobRequest, user: str = Depends(_verify_user)):
 
     workers = load_workers()
     tc = req.tc or req.mode  # FIX: tc may not be set; fall back to mode
+    worker = await _pick_worker(workers, job_priority=req.priority, required_tc=tc)  # FIX 2026-08-20
     if not worker:
         raise HTTPException(503, "no_worker_available")
 
