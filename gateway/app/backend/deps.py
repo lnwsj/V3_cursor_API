@@ -72,7 +72,7 @@ def _verify_user(
     if not header_value and credentials is not None:
         header_value = f"Bearer {credentials.credentials}"
     token = _bearer_token(header_value) if header_value else cutdee_session
-    return _user_for_token(token)
+    return _user_for_token(token, PUBLIC_API_KEYS, ADMIN_API_KEY)
 
 
 def _verify_internal(x_cutdee_internal: Optional[str] = Header(None)) -> bool:
