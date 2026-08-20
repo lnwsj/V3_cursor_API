@@ -1,5 +1,7 @@
 # V3 Cursor API: คู่มือ Pipeline และ Settings
 
+> **Current source warning:** pipeline contract ใน Worker มีอยู่ แต่ Gateway refactor ปัจจุบันยัง release-blocked ที่ dispatch/upload. ตารางนี้อธิบาย intended/Worker behavior และผล acceptance ต้องระบุ release marker เสมอ
+
 ## 1. ตาราง Pipeline
 
 | Pipeline | Input หลัก | พฤติกรรม | Output โดยทั่วไป |
@@ -21,7 +23,7 @@
 | `height` | เลขคู่ 360-3840 | ความสูง output |
 | `fps` | 15-60 | frame rate |
 | `bitrate` | เช่น `6000k` | video bitrate |
-| `encoder` | `auto`, `h264_videotoolbox`, `h264_nvenc`, `libx264` ตาม worker | encoder alias |
+| `encoder` | `auto`, `hevc_videotoolbox`, `h264_videotoolbox`, `h264_nvenc`, `libx264` ตาม worker | encoder alias |
 | `preset` | `ultrafast`, `superfast`, `veryfast`, `faster`, `fast`, `medium`, `slow`, `hq` | speed/quality profile |
 | `key_color` | `#RRGGBB` | สีที่ต้องการตัดออก |
 | `similarity` | 0-1 | tolerance ของ chroma key |
@@ -72,6 +74,8 @@ V3_TC02_STREAMING=1
 V3_TC02_PRODUCERS=2
 V3_TC02_CONSUMERS=3
 ```
+
+Live M4 snapshot ล่าสุดรายงาน preferred encoder เป็น `hevc_videotoolbox`; benchmark ใน [`V3_MAC_M4_SPEED_BENCHMARK_TH.md`](V3_MAC_M4_SPEED_BENCHMARK_TH.md) เป็น historical H.264 run และต้องทำ HEVC benchmark ใหม่หากต้องการใช้เป็น performance baseline ปัจจุบัน
 
 TC02 สร้าง fixed lens/composition matrix โดย default 21 outputs ต่อ product การเปิด parallelism เพิ่มอาจทำให้ memory/CPU contention สูงขึ้นบนเครื่องอื่น จึงต้อง tune แยกตาม worker class
 
@@ -179,4 +183,4 @@ curl -fsS -X POST "$BASE/api/tc04/dry-run" \
   }'
 ```
 
-Dry-run เป็น estimate เท่านั้น ไม่แทน real-media acceptance และไม่รับประกัน output count หาก media probe ให้ duration ต่างจากค่าที่ assume
+Dry-run เป็น estimate เท่านั้น ไม่แทน real-media acceptance และไม่รับประกัน output count หาก media probe ให้ duration ต่างจากค่าที่ assume. Current Gateway refactor มี planner module แต่ยังไม่มี HTTP route ที่ยืนยันแล้วสำหรับ `/api/{tc}/dry-run`

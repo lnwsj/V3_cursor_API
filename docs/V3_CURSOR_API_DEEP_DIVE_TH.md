@@ -1,5 +1,7 @@
 # V3_cursor_API: เอกสารศึกษาเชิงลึกและแผนฟื้นฟูระบบ
 
+> **Historical document notice:** เนื้อหาส่วนใหญ่เป็น snapshot ก่อน/ระหว่าง remediation. สำหรับ source refactor ล่าสุดและสถานะ release ให้ยึด [`V3_CURSOR_API_CURRENT_STATE_AUDIT_TH.md`](V3_CURSOR_API_CURRENT_STATE_AUDIT_TH.md) ซึ่งตรวจเมื่อ 2026-08-20
+
 เอกสารฉบับนี้เป็นเอกสารศึกษาระบบแบบ end-to-end ของ `V3_cursor_API` ตั้งแต่ source code, pipeline, API contract, persistence, deployment, production surface, cluster workers, reverse tunnels, การทดสอบ และแผนแก้ไขก่อนเปิดใช้งานจริง
 
 เอกสารนี้เขียนจากหลักฐาน 4 กลุ่ม:
@@ -62,7 +64,7 @@
 - sync parity บางส่วน: reframe cap 3, full-resolution default, null composition fallback, portable path และ TC01 mapping progress
 - เพิ่ม pytest suite สำหรับ planner, input/output contract, queue, cancel และ health responsiveness
 
-สถานะนี้เป็น **source-level remediation ที่ deploy แล้วบน production Gateway, local Worker และ Mac M4** ที่ release `f6299fa` แต่ยังต้องทำ real-media acceptance ให้ครบทุก TC และจัดการ worker nodes ที่ยังอยู่นอก release ก่อนถือว่า cluster parity สมบูรณ์
+ข้อความนี้เป็นสถานะของ historical remediation snapshot ไม่ใช่ current source refactor verdict. Current `refactor-base / 25e1032` ยัง release-blocked ที่ Gateway; production live แยกอยู่ที่ Gateway `f6299fa` และ M4 `aa671b5`
 
 Validation หลัง remediation รอบนี้:
 

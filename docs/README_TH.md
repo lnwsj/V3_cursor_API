@@ -10,10 +10,36 @@
 | ผู้เลือก pipeline | [`V3_CURSOR_API_PIPELINE_GUIDE_TH.md`](V3_CURSOR_API_PIPELINE_GUIDE_TH.md) |
 | ผู้ดูแล production | [`V3_CURSOR_API_OPERATIONS_RUNBOOK_TH.md`](V3_CURSOR_API_OPERATIONS_RUNBOOK_TH.md) |
 | Developer | [`V3_CURSOR_API_DEVELOPMENT_GUIDE_TH.md`](V3_CURSOR_API_DEVELOPMENT_GUIDE_TH.md) |
+| Current source audit | [`V3_CURSOR_API_CURRENT_STATE_AUDIT_TH.md`](V3_CURSOR_API_CURRENT_STATE_AUDIT_TH.md) |
 | ศึกษาสถาปัตยกรรม | [`V3_CURSOR_API_DEEP_DIVE_TH.md`](V3_CURSOR_API_DEEP_DIVE_TH.md) |
 | Benchmark Mac M4 | [`V3_MAC_M4_SPEED_BENCHMARK_TH.md`](V3_MAC_M4_SPEED_BENCHMARK_TH.md) |
 
 รายงานหลักฐานจากการทดสอบอยู่ใน [`reports/`](reports/)
+
+## Current Status
+
+`refactor-base` ณ 2026-08-20 อยู่ในสถานะ **RELEASE BLOCKED** สำหรับ Gateway เนื่องจาก refactor router ยังมี lifespan, auth, upload และ worker-dispatch wiring ที่ต้องแก้และทำ E2E acceptance ใหม่
+
+Production เป็นคนละ snapshot กับ source ปัจจุบัน:
+
+| Snapshot | Marker | ใช้เพื่อ |
+|---|---|---|
+| Current source audit | `refactor-base / 25e1032` | ตรวจ code และวาง release gates |
+| Production Gateway | `1.2.0 / f6299fa` | live operational reference |
+| Production M4 Worker | `1.2.0 / aa671b5` | live M4 runtime; preferred `hevc_videotoolbox` |
+| Historical M4 benchmark | `aa671b5` | H.264 acceptance result ก่อน encoder preference เปลี่ยน |
+
+ห้ามนำผลจาก source HEAD, production หรือ historical report มาปะปนกันโดยไม่ระบุ snapshot
+
+## Report Chronology
+
+| ช่วงเวลา | ประเภท | วิธีอ่าน |
+|---|---|---|
+| 2026-08-18 | deep dive, remediation และ production studies | historical evidence; ไม่ใช่ current source contract |
+| 2026-08-19 | Mac M4 H.264 optimization benchmark | historical performance snapshot ของ `aa671b5` |
+| 2026-08-20 | Current State Audit | source/live parity และ release gates ล่าสุด |
+
+รายงานเก่าควรเก็บเป็น immutable evidence และไม่แก้ผลเดิมทับด้วย runtime รุ่นใหม่ หากข้อสรุปถูก supersede ให้เพิ่ม current-state link แทน
 
 ## ภาพรวมระบบ
 
@@ -46,6 +72,8 @@ Client
 - Deployment: `deploy/install.sh` และ service configuration ของแต่ละ host
 
 README และรายงานเก่าอาจเป็น historical snapshot หากขัดกับ source หรือ health runtime ให้ยึด source, release artifact และผล acceptance ล่าสุด
+
+สำหรับความขัดแย้งระหว่างเอกสารกับ source refactor ให้ดู [`V3_CURSOR_API_CURRENT_STATE_AUDIT_TH.md`](V3_CURSOR_API_CURRENT_STATE_AUDIT_TH.md) ก่อน
 
 ## ข้อห้ามด้านความลับ
 
